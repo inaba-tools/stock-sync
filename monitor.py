@@ -1788,8 +1788,22 @@ def ebay_orders(token, days=60):
                         "ship_by": (li.get("lineItemFulfillmentInstructions") or {}).get("shipByDate", ""),
                         "date": (o.get("creationDate") or "")[:10], "total": round(total, 2), "tax": round(tax, 2),
                         "fee": round(fee, 2), "payout": round(total - fee, 2),   # 税はeBayが別に預かるので、受取額は合計−手数料
-                        "shipped": shipped})
+                        "shipped": shipped, "kind": item_kind(li.get("title", ""))})
     return out
+
+
+def item_kind(title):
+    """eBayの商品名から種類（売上シートのメモの1行目に書く）"""
+    t = (title or "").lower()
+    if re.search(r"flip phone|keitai|feature phone|cell ?phone|mobile phone", t):
+        return "ガラケー"
+    if re.search(r"camera|cyber-?shot|coolpix|ixy|lumix|exilim", t):
+        return "デジカメ"
+    if re.search(r"walkman|minidisc|mini disc|\bmd\b", t):
+        return "MDプレーヤー"
+    if re.search(r"game ?boy|nintendo|3ds|\bds\b|psp|vita|playstation|console", t):
+        return "ゲーム機"
+    return ""
 
 
 THANKS_MSG = ("Hi! Thank you so much for your purchase. Your item is being prepared with care, "
