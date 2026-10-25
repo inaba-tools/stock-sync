@@ -1,0 +1,35 @@
+name: 売れた直後の売上反映
+
+on:
+  workflow_dispatch:          # eBayで売れた瞬間に、管理表（Apps Script）から呼ばれる
+
+concurrency:
+  group: sales
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 売上シートに手数料・入金額・注文番号などを書く
+        run: python monitor.py sales
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
+          SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
+          SHEET_API_KEY: ${{ secrets.SHEET_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
