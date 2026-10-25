@@ -2467,111 +2467,6 @@ def discover():
     sheet("log", message=msg)
 
 
-# ---------- ジャンク品さがし（修理して売る候補。結果はファイルに書き出し、不具合の判定はClaudeが行う） ----------
-def junkscan():
-    data = sheet("list")
-    settings = data.get("settings", {})
-    keywords = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "")) if k.strip()]
-    models = [k for k in keywords if game_info(k) and game_info(k).get("kind") not in ("camera", "md")]   # ガラケー・デジカメ・MDは対象外（ゲーム機だけ）
-    KNOWN_MODELS[:] = keywords
-    excluded = excluded_sellers(data)
-    cap = max_cost(settings)
-    found, seen, market = [], set(), {}
-    t0 = time.time()
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        page = browser.new_page(locale="ja-JP", user_agent=(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"))
-        page.route("**/*", lambda route: route.abort()
-                   if route.request.resource_type in ("image", "media", "font") else route.continue_())
-        waited = 0
-        if os.path.exists("junk_urls.json"):   # 前回の検索で読みきれなかった商品だけを読む
-            with open("junk_urls.json", encoding="utf-8") as f:
-                found = json.load(f)
-            seen = {x["url"] for x in found}
-            for kw in {x["kw"] for x in found}:
-                try:
-                    sale, n = ebay_market_usd(kw)
-                    market[kw] = {"usd": sale, "count": n}
-                except Exception:
-                    pass
-            models = []
-        for kw in models:
-            if monitor_running() and waited < 30 * 60:   # 在庫の見張りを優先（同時にメルカリを見に行かない。待つのは合計30分まで）
-                w0 = time.time()
-                while monitor_running() and waited + (time.time() - w0) < 30 * 60:
-                    time.sleep(20)
-                waited += time.time() - w0
-            if time.time() - t0 - waited > 90 * 60:
-                print("時間切れのため、残りの機種は次回に回します")
-                break
-            gi = game_info(kw)
-            try:
-                sale, n = ebay_market_usd(kw)
-                market[kw] = {"usd": sale, "count": n}
-            except Exception as e:
-                market[kw] = {"usd": None, "count": 0, "error": str(e)[:80]}
-            q = "" if gi.get("exact") else kw
-            base = f"https://jp.mercari.com/search?status=on_sale&sort=created_time&order=desc&category_id={gi['mercari']}"
-            urls = [base + "&item_condition_id=6" + ("&keyword=" + requests.utils.quote(q) if q else ""),   # 全体的に状態が悪い
-                    base + "&keyword=" + requests.utils.quote((q + " ジャンク").strip())]
-            for url in urls:
-                try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                    page.wait_for_selector('a[href*="/item/m"], a[href*="/shops/product/"]', timeout=20000)
-                    items = page.evaluate(SEARCH_JS)
-                except Exception:
-                    items = []
-                for it in items:
-                    u = it["url"]
-                    if u in seen or it.get("auction") or not it["price"] or it["price"] > cap:
-                        continue
-                    t = unicodedata.normalize("NFKC", it["title"])
-                    ok = match_game(t, kw) if gi.get("alias") or gi.get("exact") else has_model(t, kw)
-                    if ok and gi.get("kind") in ("camera", "md") and brand_reject_reason(t, gi):
-                        ok = False   # 型番が同じ別メーカーの品（例：富士フイルム FinePix S7000）は外す
-                    if not ok or reserved_reason(t):
-                        continue
-                    seen.add(u)
-                    found.append({"kw": kw, "url": u, "title": it["title"], "price": it["price"]})
-                time.sleep(random.uniform(4, 7))
-        # 修理代をかける余裕（利益の下限を引いた残り）が1,500円未満の商品は、ページを読まずに外す
-        keep = []
-        for x in found:
-            if x.get("desc") is not None:
-                keep.append(x)
-                continue
-            mk = (market.get(x["kw"]) or {}).get("usd")
-            if not mk:
-                continue
-            p, _ = profit(x["price"], mk, settings, x["kw"])
-            if p - min_profit_for(0, settings, x["kw"]) >= 1500:
-                keep.append(x)
-        print(f"検索で{len(found)}件。修理代をかける余裕がある{len(keep)}件の商品ページを読みます")
-        found = keep
-        for x in found:
-            if time.time() - t0 > 160 * 60:
-                break
-            st, info = check_mercari(page, x["url"], retry=False)
-            x["status"] = st
-            if st == "on_sale":
-                try:
-                    d = page.evaluate(DETAIL_JS)
-                except Exception:
-                    d = {}
-                x.update(desc=d.get("description", ""), cond=d.get("condition", ""),
-                         seller=info.get("seller", ""), price=info.get("price") or x["price"])
-                if seller_id(x["seller"]) in excluded:
-                    x["status"] = "excluded"
-            time.sleep(random.uniform(3, 5))
-        browser.close()
-    os.makedirs("out", exist_ok=True)
-    with open("out/junkscan.json", "w", encoding="utf-8") as f:
-        json.dump({"items": found, "market": market}, f, ensure_ascii=False)
-    print(f"ジャンクさがし：{len(found)}件（{(time.time() - t0) / 60:.0f}分）")
-
-
 # ---------- ラクマ（仕入れはやめた。以前の行を確認して止めるためだけに残す） ----------
 RAKUMA_GENRES = {"669": "携帯電話本体", "668": "スマートフォン本体", "1386": "コンパクトデジタルカメラ",
                  "789": "テレビゲーム > 本体", "695": "ポータブルMDプレーヤー"}
@@ -2901,8 +2796,6 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) > 1 and sys.argv[1] == "discover":
             discover()
-        elif len(sys.argv) > 1 and sys.argv[1] == "junkscan":
-            junkscan()
         elif len(sys.argv) > 1 and sys.argv[1] == "sales":
             sync_sales(get_access_token(), sheet("list").get("settings", {}))   # 売れた直後に管理表から呼ばれる
         elif len(sys.argv) > 1 and sys.argv[1] == "orphans":
