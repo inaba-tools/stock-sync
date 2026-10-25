@@ -2510,6 +2510,8 @@ def junkscan():
                         continue
                     t = unicodedata.normalize("NFKC", it["title"])
                     ok = match_game(t, kw) if gi.get("alias") or gi.get("exact") else has_model(t, kw)
+                    if ok and gi.get("kind") in ("camera", "md") and brand_reject_reason(t, gi):
+                        ok = False   # 型番が同じ別メーカーの品（例：富士フイルム FinePix S7000）は外す
                     if not ok or reserved_reason(t):
                         continue
                     seen.add(u)
