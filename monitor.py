@@ -1788,7 +1788,9 @@ def ebay_orders(token, days=60):
                         "ship_by": (li.get("lineItemFulfillmentInstructions") or {}).get("shipByDate", ""),
                         "date": (o.get("creationDate") or "")[:10], "total": round(total, 2), "tax": round(tax, 2),
                         "fee": round(fee, 2), "payout": round(total - fee, 2),   # 税はeBayが別に預かるので、受取額は合計−手数料
-                        "shipped": shipped, "kind": item_kind(li.get("title", ""))})
+                        "shipped": shipped, "kind": item_kind(li.get("title", "")),
+                        "country": ((((o.get("fulfillmentStartInstructions") or [{}])[0].get("shippingStep") or {})
+                                     .get("shipTo") or {}).get("contactAddress") or {}).get("countryCode", "")})   # 届け先の国（関税の見込みに使う）
     return out
 
 
