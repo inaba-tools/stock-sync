@@ -1474,31 +1474,36 @@ def _main():
     try:
         # 売上シートに、注文番号・税・手数料・受取額を書き込む（売れた商品を仕入れ済みにした後に反映）
         if token:
-            orders = ebay_orders(token)
-            try:
-                ad_fees = ebay_ad_fees()   # 広告経由で売れた注文の広告費（権限がまだなければ None）
-            except Exception as e:
-                ad_fees = None
-                print("広告費の確認に失敗:", str(e)[:100])
-            if ad_fees is not None:
-                for o in orders:
-                    o["ad_fee"] = ad_fees.get(o["order_id"], 0)   # 広告経由でなければ 0
-            try:   # 出品手数料など広告以外のeBayの費用を経費シートへ（同じ明細は二重に入らない）
-                sheet("expenses_sync", items=NON_SALE_OTHER, fx=round(usd_jpy(settings), 2))
-            except Exception as e:
-                print("経費の記録に失敗:", str(e)[:100])
-            if orders:
-                res = sheet("sales_sync", orders=orders, fx=round(usd_jpy(settings), 2),
-                            ad_models=[model_key(k) for k in GAMES], ad_rate=AD_RATE)   # 広告を付ける機種（売上の広告費の計算に使う）
-                # 仕入れ済みになって初めて売上シートに入った注文 → 購入者にお礼と発送予定日を送る
-                for o in orders:
-                    if o["item_id"] in (res.get("new_ids") or []) and o.get("buyer"):
-                        send_thanks(o, token)
+            sync_sales(token, settings)
     except Exception as e:
         print("売上シートの更新に失敗:", str(e)[:100])
     msg = f"{now()} 正常終了：{summary}／eBayで売れた {sold_n}件／eBay停止 {stopped}件／利益計算 {researched}件／出品 {listed}件"
     print(msg)
     sheet("log", message=msg)
+
+
+def sync_sales(token, settings):
+    """売上シートに、注文番号・税・手数料・受取額などを書き込む（売れた直後の即時実行にも使う）"""
+    orders = ebay_orders(token)
+    try:
+        ad_fees = ebay_ad_fees()   # 広告経由で売れた注文の広告費（権限がまだなければ None）
+    except Exception as e:
+        ad_fees = None
+        print("広告費の確認に失敗:", str(e)[:100])
+    if ad_fees is not None:
+        for o in orders:
+            o["ad_fee"] = ad_fees.get(o["order_id"], 0)   # 広告経由でなければ 0
+    try:   # 出品手数料など広告以外のeBayの費用を経費シートへ（同じ明細は二重に入らない）
+        sheet("expenses_sync", items=NON_SALE_OTHER, fx=round(usd_jpy(settings), 2))
+    except Exception as e:
+        print("経費の記録に失敗:", str(e)[:100])
+    if orders:
+        res = sheet("sales_sync", orders=orders, fx=round(usd_jpy(settings), 2),
+                    ad_models=[model_key(k) for k in GAMES], ad_rate=AD_RATE)   # 広告を付ける機種（売上の広告費の計算に使う）
+        # 仕入れ済みになって初めて売上シートに入った注文 → 購入者にお礼と発送予定日を送る
+        for o in orders:
+            if o["item_id"] in (res.get("new_ids") or []) and o.get("buyer"):
+                send_thanks(o, token)
 
 
 def research_row(r, info, settings):
@@ -2884,6 +2889,8 @@ if __name__ == "__main__":
             discover()
         elif len(sys.argv) > 1 and sys.argv[1] == "junkscan":
             junkscan()
+        elif len(sys.argv) > 1 and sys.argv[1] == "sales":
+            sync_sales(get_access_token(), sheet("list").get("settings", {}))   # 売れた直後に管理表から呼ばれる
         elif len(sys.argv) > 1 and sys.argv[1] == "orphans":
             orphans()
         elif len(sys.argv) > 1 and sys.argv[1] == "dupdebug":
