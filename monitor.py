@@ -2453,7 +2453,7 @@ def junkscan():
     data = sheet("list")
     settings = data.get("settings", {})
     keywords = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "")) if k.strip()]
-    models = [k for k in keywords if game_info(k) and game_info(k).get("kind") != "camera"]   # ガラケー・デジカメは対象外（ゲーム機・MDだけ）
+    models = [k for k in keywords if game_info(k) and game_info(k).get("kind") not in ("camera", "md")]   # ガラケー・デジカメ・MDは対象外（ゲーム機だけ）
     KNOWN_MODELS[:] = keywords
     excluded = excluded_sellers(data)
     cap = max_cost(settings)
