@@ -892,10 +892,21 @@ def ad_pct(model):
     return AD_RATE if game_info(model or "") else 0
 
 
+DUTY_PCT = 12.5   # 2026/10/25 アメリカの関税の見込み（売れた値段の%）。出品者が払う（DDP）ので手数料と同じように差し引く
+
+
+def duty_pct(settings):
+    """関税の見込み（%）。設定シートの duty_pct があればそちらを使う"""
+    try:
+        return float(settings.get("duty_pct") if settings.get("duty_pct") not in (None, "") else DUTY_PCT)
+    except (TypeError, ValueError):
+        return DUTY_PCT
+
+
 def profit(cost_jpy, sale_usd, settings, model=""):
     sale_usd = adj(sale_usd, settings)
     fx = usd_jpy(settings)
-    fee = float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + ad_pct(model)
+    fee = float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + ad_pct(model) + duty_pct(settings)
     ship = float(settings.get("ship_jpy") or 3000)
     revenue = sale_usd * fx
     p = revenue * (1 - fee / 100) - ship - cost_jpy
@@ -1152,7 +1163,7 @@ def _main():
                 if status == "on_sale" and (info or {}).get("price"):
                     p_txt = ""
                     if s.get("usd"):
-                        fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100
+                        fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100 + duty_pct(settings) / 100
                         p = s["usd"] * usd_jpy(settings) * (1 - fee) - float(settings.get("ship_jpy") or 3000) - info["price"]
                         p_txt = f"・見込み利益 約{int(p):,}円"
                         upd["profit"] = round(p)
@@ -1222,7 +1233,7 @@ def _main():
                         if new_price:
                             # 実際の出品価格で売れたときの利益をシートに書く
                             fx = usd_jpy(settings)
-                            fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100
+                            fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100 + duty_pct(settings) / 100
                             rev = new_price * fx
                             p = rev * (1 - fee) - float(settings.get("ship_jpy") or 3000) - info["price"]
                             upd["cost"] = info["price"]
@@ -1621,7 +1632,7 @@ WATCH_INTERVAL_H = 3        # 値下げの間隔（時間）（2026/10/22 1時�
 def floor_price_usd(cost, query, settings):
     """最低利益（2,000円か、仕入れ値・機種ごとの最低利益の高いほう）が残る最低価格"""
     fx = usd_jpy(settings)
-    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100
+    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
     ship = float(settings.get("ship_jpy") or 3000)
     min_profit = max(min_profit_for(cost, settings, query), PRICE_FLOOR_PROFIT)
     if ad_pct(query):
@@ -1662,7 +1673,7 @@ def expected_profit(cost, query, settings):
         if target is None or target < floor:
             return None
         fx = usd_jpy(settings)
-        fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100
+        fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
         return target * fx * (1 - fee) - float(settings.get("ship_jpy") or 3000) - float(cost)
     except (TypeError, ValueError):
         return None
@@ -1670,7 +1681,7 @@ def expected_profit(cost, query, settings):
 
 def list_price_usd(cost, settings):
     fx = usd_jpy(settings)
-    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100
+    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + duty_pct(settings)) / 100
     margin = float(settings.get("target_margin") or 20) / 100
     ship = float(settings.get("ship_jpy") or 3000)
     revenue = (cost + ship) / max(0.05, 1 - fee - margin)
@@ -2285,7 +2296,7 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
     except Exception:
         pass
     fx = usd_jpy(settings)
-    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(q) / 100
+    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(q) / 100 + duty_pct(settings) / 100
     ship = float(settings.get("ship_jpy") or 3000)
     best = None
     for it in items:
