@@ -2467,6 +2467,17 @@ def junkscan():
         page.route("**/*", lambda route: route.abort()
                    if route.request.resource_type in ("image", "media", "font") else route.continue_())
         waited = 0
+        if os.path.exists("junk_urls.json"):   # 前回の検索で読みきれなかった商品だけを読む
+            with open("junk_urls.json", encoding="utf-8") as f:
+                found = json.load(f)
+            seen = {x["url"] for x in found}
+            for kw in {x["kw"] for x in found}:
+                try:
+                    sale, n = ebay_market_usd(kw)
+                    market[kw] = {"usd": sale, "count": n}
+                except Exception:
+                    pass
+            models = []
         for kw in models:
             if monitor_running() and waited < 30 * 60:   # 在庫の見張りを優先（同時にメルカリを見に行かない。待つのは合計30分まで）
                 w0 = time.time()
@@ -2504,7 +2515,20 @@ def junkscan():
                     seen.add(u)
                     found.append({"kw": kw, "url": u, "title": it["title"], "price": it["price"]})
                 time.sleep(random.uniform(4, 7))
-        print(f"検索で{len(found)}件。商品ページを読みます")
+        # 修理代をかける余裕（利益の下限を引いた残り）が1,500円未満の商品は、ページを読まずに外す
+        keep = []
+        for x in found:
+            if x.get("desc") is not None:
+                keep.append(x)
+                continue
+            mk = (market.get(x["kw"]) or {}).get("usd")
+            if not mk:
+                continue
+            p, _ = profit(x["price"], mk, settings, x["kw"])
+            if p - min_profit_for(0, settings, x["kw"]) >= 1500:
+                keep.append(x)
+        print(f"検索で{len(found)}件。修理代をかける余裕がある{len(keep)}件の商品ページを読みます")
+        found = keep
         for x in found:
             if time.time() - t0 > 160 * 60:
                 break
