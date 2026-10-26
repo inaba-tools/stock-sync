@@ -1208,7 +1208,7 @@ def _main():
                         dup_note(r, info["price"], imgs, r["ebay_item_id"])
                     except Exception as e:
                         print("写真の比較に失敗:", str(e)[:80])
-                    # 出品中の値段を見直す（利益2,500円が下限。ウォッチありは少しずつ、なしは下限まで下げる）
+                    # 出品中の値段を見直す（2026/10/26 ウォッチの有無に関係なく、利益2,000円の値段にそろえる）
                     try:
                         q = (r.get("query") or "").strip()
                         target, floor = market_price_usd(info["price"], q, settings)
@@ -1629,14 +1629,12 @@ WATCH_STEP_USD = 2.0        # ウォッチされている商品は $2（約300�
 WATCH_INTERVAL_H = 3        # 値下げの間隔（時間）（2026/10/22 1時間→3時間）
 
 
-def floor_price_usd(cost, query, settings):
-    """最低利益（2,000円か、仕入れ値・機種ごとの最低利益の高いほう）が残る最低価格"""
+def floor_price_usd(cost, query, settings, profit=None):
+    """利益がちょうど profit 円（省略時は2,000円）残る値段。2026/10/26 出品・値下げはすべてこの値段にそろえる"""
     fx = usd_jpy(settings)
     fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
     ship = float(settings.get("ship_jpy") or 3000)
-    min_profit = max(min_profit_for(cost, settings, query), PRICE_FLOOR_PROFIT)
-    if ad_pct(query):
-        min_profit = max(min_profit - AD_PROFIT_RELIEF, 1500)   # 広告代の分だけ最低利益を下げて、値段を上げすぎない
+    min_profit = PRICE_FLOOR_PROFIT if profit is None else profit
     return math.ceil((cost + ship + min_profit) / max(0.05, 1 - fee) / fx) - 0.01
 
 
@@ -1644,6 +1642,7 @@ def decide_price(cur, target, floor, watch, days, hours_since_drop):
     """出品中の値段を決める。
     ・ウォッチあり：3時間ごとに$2ずつ下げる（下限まで）。別に値引きオファーも送る
     ・ウォッチなし：すぐに下限の値段（利益2,000円）まで下げる"""
+    return floor   # 2026/10/26 ウォッチの有無に関係なく、利益2,000円の値段にそろえる
     if cur is None:
         return max(target or floor, floor)
     if watch:   # ウォッチが付いたら、出品からの日数に関係なく少しずつ下げる
@@ -2105,9 +2104,9 @@ def create_listing(r, info, detail, settings, token):
     target, floor = market_price_usd(cost, model, settings)
     if target is None:
         return None, "SKIP:eBayの相場が取れないため出品しません"
-    if target < floor:
+    if target < floor_price_usd(cost, model, settings, min_profit_for(cost, settings, model)):
         return None, f"SKIP:相場(${target:.2f})では利益{int(min_profit_for(cost, settings, model)):,}円が残らないため出品しません"
-    price = target
+    price = floor   # 2026/10/26 出品するときから利益2,000円の値段で出す（相場の値段では出さない）
     pics = upload_pictures(detail.get("images", []), token)
     if not pics:
         return None, "写真をeBayに取り込めなかったため出品を中止しました（もう一度チェックすると再挑戦します）"
