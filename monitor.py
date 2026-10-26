@@ -1801,8 +1801,21 @@ def ebay_orders(token, days=60):
                         "fee": round(fee, 2), "payout": round(total - fee, 2),   # 税はeBayが別に預かるので、受取額は合計−手数料
                         "shipped": shipped, "kind": item_kind(li.get("title", "")),
                         "country": ((((o.get("fulfillmentStartInstructions") or [{}])[0].get("shippingStep") or {})
-                                     .get("shipTo") or {}).get("contactAddress") or {}).get("countryCode", "")})   # 届け先の国（関税の見込みに使う）
+                                     .get("shipTo") or {}).get("contactAddress") or {}).get("countryCode", ""),   # 届け先の国（関税の見込みに使う）
+                        "ship_to": ship_to_lines(o)})
     return out
+
+
+def ship_to_lines(o):
+    """届け先（名前・番地・市 州 郵便番号）を配送ラベルと同じ並び・大文字で。売上シートのメモに書いて、箱とラベルを照らし合わせる"""
+    st = (((o.get("fulfillmentStartInstructions") or [{}])[0].get("shippingStep") or {}).get("shipTo") or {})
+    a = st.get("contactAddress") or {}
+    zip_ = str(a.get("postalCode") or "")
+    if a.get("countryCode") == "US":
+        zip_ = zip_[:5]   # ラベルは 5桁（11222-6013 → 11222）
+    street = ", ".join(x for x in (a.get("addressLine1"), a.get("addressLine2")) if x)
+    city = " ".join(x for x in (a.get("city"), a.get("stateOrProvince"), zip_) if x)
+    return "\n".join(x.upper() for x in (st.get("fullName"), street, city) if x)
 
 
 def item_kind(title):
