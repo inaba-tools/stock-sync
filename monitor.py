@@ -527,7 +527,28 @@ def save_market_cache():
         print("相場を保存できませんでした:", str(e)[:100])
 
 
-MY_SELLER = "my_store"
+_my_seller = None
+
+
+def my_seller():
+    """自分のeBayユーザー名（コードに書かずに、eBayから取得する）"""
+    global _my_seller
+    if _my_seller is None:
+        _my_seller = os.environ.get("EBAY_SELLER", "").lower()
+        if not _my_seller:
+            try:
+                xml = ('<?xml version="1.0" encoding="utf-8"?>'
+                       '<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents"></GetUserRequest>')
+                r = requests.post(TRADING_URL, headers={
+                    "X-EBAY-API-CALL-NAME": "GetUser", "X-EBAY-API-SITEID": "0",
+                    "X-EBAY-API-COMPATIBILITY-LEVEL": "1209",
+                    "X-EBAY-API-IAF-TOKEN": get_access_token(), "Content-Type": "text/xml"},
+                    data=xml.encode("utf-8"), timeout=30)
+                _my_seller = (ET.fromstring(r.content).findtext("e:User/e:UserID", default="", namespaces=NS) or "").lower()
+            except Exception as e:
+                print("自分のユーザー名を取得できませんでした:", e)
+                _my_seller = ""
+    return _my_seller
 
 # ---------- 携帯ゲーム機（ガラケーと同じ仕組みで扱う） ----------
 # mercari: メルカリの本体カテゴリ、ebay_cat: eBayのカテゴリ（Video Game Consoles）
@@ -851,7 +872,7 @@ def _ebay_market_usd(query):
     r.raise_for_status()
     prices = []
     for it in r.json().get("itemSummaries", []):
-        if (it.get("seller", {}).get("username") or "").lower() == MY_SELLER:
+        if (it.get("seller", {}).get("username") or "").lower() == my_seller():
             continue   # 自分の出品は相場に入れない
         try:
             p = float(it["price"]["value"])
