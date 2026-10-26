@@ -783,9 +783,9 @@ def game_reject_reason(title, model, price_jpy=None, sale_usd=None, settings=Non
 GAME_EBAY_CATEGORY = "139971"
 # ゲームボーイ系は古くて仕入れが高く数も少ないので、利益が大きく取れるときだけ扱う
 GAMEBOY_MODELS = {"DMG-01", "MGB-001", "CGB-001", "AGB-001", "AGS-001", "OXY-001"}
-GAMEBOY_MIN_PROFIT = 10000
+GAMEBOY_MIN_PROFIT = 2000   # 2026/10/26 ほかの商品と同じ2,000円にそろえた（以前は10,000円）
 RETRO_MODELS = {"WSC-001", "NEOP-10"}   # 古いゲーム機：液晶の不具合・返品が多いので利益が大きいときだけ
-RETRO_MIN_PROFIT = 4000
+RETRO_MIN_PROFIT = 2000   # 2026/10/26 ほかの商品と同じ2,000円にそろえた（以前は4,000円）
 
 # 出品枠（月350件・2万ドル）を有効に使うためのルール
 MAX_PER_MODEL = 3   # 同じ機種の出品は3件まで（仕入れが安い＝利益が大きいものを残す）
