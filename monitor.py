@@ -1230,6 +1230,9 @@ def _main():
                             pass
                         new_price = decide_price(act.get("price"), target, floor, act.get("watch"),
                                                  act.get("days"), hours_since_drop)
+                        slow = slow_drop_price(r.get("memo"), target, floor)
+                        if slow:
+                            new_price = slow
                         if new_price:
                             # 実際の出品価格で売れたときの利益をシートに書く
                             fx = usd_jpy(settings)
@@ -1636,6 +1639,21 @@ def floor_price_usd(cost, query, settings, profit=None):
     ship = float(settings.get("ship_jpy") or 3000)
     min_profit = PRICE_FLOOR_PROFIT if profit is None else profit
     return math.ceil((cost + ship + min_profit) / max(0.05, 1 - fee) / fx) - 0.01
+
+
+SLOW_DROP_STEP_USD = 2.0     # 「ゆっくり値下げ」の出品：30分ごと（自動実行のたび）に $2（約300円）ずつ下げる
+SLOW_DROP_MIN = 30
+
+
+def slow_drop_price(memo, target, floor):
+    """メモ欄に「ゆっくり値下げ YYYY-MM-DD HH:MM」と書いた出品だけ、その時刻に相場の値段へ戻し、
+    そこから30分ごとに$2ずつ下げる（利益2,000円の値段まで）。書いていなければ None"""
+    m = re.search(r"ゆっくり値下げ\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", str(memo or ""))
+    if not m or not target or not floor:
+        return None
+    start = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+    steps = max(0, int((datetime.now(JST) - start).total_seconds() // (SLOW_DROP_MIN * 60)))
+    return max(round(target - SLOW_DROP_STEP_USD * steps, 2), floor)
 
 
 def decide_price(cur, target, floor, watch, days, hours_since_drop):
