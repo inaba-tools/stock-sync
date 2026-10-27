@@ -1535,12 +1535,29 @@ def sync_sales(token, settings):
     except Exception as e:
         print("経費の記録に失敗:", str(e)[:100])
     if orders:
+        try:   # 発送済みの注文は、配達された日も調べる（届いたらお礼を送るため）
+            dd = delivered_dates([o["order_id"] for o in orders if o.get("shipped")], token)
+            for o in orders:
+                if dd.get(o["order_id"]):
+                    o["delivered"] = dd[o["order_id"]]
+            if dd:
+                print("配達済みの注文:", dd)
+        except Exception as e:
+            print("配達日の確認でエラー:", str(e)[:100])
         res = sheet("sales_sync", orders=orders, fx=round(usd_jpy(settings), 2),
                     ad_models=[model_key(k) for k in GAMES], ad_rate=AD_RATE)   # 広告を付ける機種（売上の広告費の計算に使う）
         # 仕入れ済みになって初めて売上シートに入った注文 → 購入者にお礼と発送予定日を送る
         for o in orders:
             if o["item_id"] in (res.get("new_ids") or []) and o.get("buyer"):
                 send_thanks(o, token)
+        # 届いた注文（売上シートの「お礼」が空のもの）→ お礼だけの短いメッセージを送り、送った日を記録
+        done = []
+        for o in orders:
+            if o["item_id"] in (res.get("thank_ids") or []) and o.get("buyer"):
+                if send_delivered_thanks(o, token):
+                    done.append(o["item_id"])
+        if done:
+            sheet("thanks_done", ids=done)
 
 
 def research_row(r, info, settings):
@@ -1891,6 +1908,43 @@ def send_thanks(o, token):
         f"<RecipientID>{escape(o['buyer'])}</RecipientID></MemberMessage>", token)
     ok = ack in ("Success", "Warning")
     print("購入者へのお礼メッセージ:", o["item_id"], "送信" if ok else "失敗 " + " / ".join(errs)[:200])
+    return ok
+
+
+DELIVERED_MSG = ("Hi! It looks like your item has been delivered. Thank you so much for your purchase — "
+                 "we hope you enjoy it!")
+
+
+def delivered_dates(order_ids, token):
+    """配達された日（日本時間 YYYY-MM-DD）を注文番号ごとに返す。配送業者の配達完了がeBayに入った注文だけ"""
+    out = {}
+    ids = [i for i in order_ids if i]
+    for k in range(0, len(ids), 20):
+        body = "<OrderIDArray>" + "".join(f"<OrderID>{escape(i)}</OrderID>" for i in ids[k:k + 20]) + \
+               "</OrderIDArray><DetailLevel>ReturnAll</DetailLevel>"
+        try:
+            ack, errs, root = trading_call_root("GetOrders", body, token)
+        except Exception as e:
+            print("配達日の確認に失敗:", str(e)[:100])
+            continue
+        for o in root.iter("{urn:ebay:apis:eBLBaseComponents}Order"):
+            oid = o.findtext("e:OrderID", default="", namespaces=NS)
+            times = [el.text for el in o.iter() if el.tag.endswith("ActualDeliveryTime") and el.text]
+            if oid and times:
+                d = datetime.fromisoformat(max(times).replace("Z", "+00:00")).astimezone(JST)
+                out[oid] = d.strftime("%Y-%m-%d")
+    return out
+
+
+def send_delivered_thanks(o, token):
+    """届いた注文の購入者に、お礼だけの短いメッセージを送る"""
+    ack, errs, root = trading_call_root(
+        "AddMemberMessageAAQToPartner",
+        f"<ItemID>{o['item_id']}</ItemID><MemberMessage><Subject>Thank you!</Subject>"
+        f"<Body>{escape(DELIVERED_MSG)}</Body><QuestionType>General</QuestionType>"
+        f"<RecipientID>{escape(o['buyer'])}</RecipientID></MemberMessage>", token)
+    ok = ack in ("Success", "Warning")
+    print("届いたお礼のメッセージ:", o["item_id"], "送信" if ok else "失敗 " + " / ".join(errs)[:200])
     return ok
 
 
