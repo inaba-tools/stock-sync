@@ -2401,6 +2401,8 @@ def discover():
     data = sheet("list")
     settings = data.get("settings", {})
     known = {r["mercari_url"].split("?")[0] for r in data["rows"]}
+    # 一度候補から外して「履歴」に移した商品も飛ばす（2026/10/28：同じジャンク品が毎回拾われ、追加の枠を取っていたため）
+    known |= {str(u).split("?")[0] for u in (data.get("seen_urls") or []) if u}
     keywords = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "ガラケー")) if k.strip()]
     KNOWN_MODELS[:] = keywords
     min_margin = 0   # 2026/10/22 利益率の条件はやめて、利益2,000円以上かどうかだけで判断する（設定シートB13は使わない）
