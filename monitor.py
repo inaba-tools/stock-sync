@@ -2336,7 +2336,14 @@ def mercari_search_url(kw, gi, settings, page_no=0):
     return url
 
 
-MERCARI_PAGES = 3   # 候補さがしで見るメルカリのページ数（1ページ約120件。新しい順なので、2ページ目以降は前からある出品）
+MERCARI_PAGES = 3   # 深く見るときのメルカリのページ数（1ページ約120件。新しい順なので、2ページ目以降は前からある出品）
+
+
+def mercari_pages_for(kw):
+    """ふだんは1ページ目（新着）だけ。機種ごとに1日1回だけ3ページまで見る（前からある出品の値下げを拾う）。
+    機種ごとに見る時間をずらして、1回の候補さがしが重くならないようにする"""
+    h = sum(ord(c) for c in kw) % 24
+    return MERCARI_PAGES if datetime.now(JST).hour == h else 1
 
 
 ACCESSORY_WORDS = ["説明書", "取説", "取扱", "充電器", "充電台", "卓上ホルダ", "卓上ホルダー", "アダプタ", "ACアダプ",
@@ -2484,7 +2491,7 @@ def discover():
                 break
             gi = game_info(kw)
             items = []
-            for pno in range(MERCARI_PAGES):   # 1ページ目（新着）だけでなく、前からある出品も見る
+            for pno in range(mercari_pages_for(kw)):   # ふだんは新着だけ、1日1回だけ前からある出品も見る
                 try:
                     page.goto(mercari_search_url(kw, gi, settings, pno), wait_until="domcontentloaded", timeout=45000)
                     page.wait_for_selector('a[href*="/item/m"], a[href*="/shops/product/"]', timeout=25000)
