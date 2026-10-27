@@ -2336,7 +2336,7 @@ def mercari_search_url(kw, gi, settings, page_no=0):
     return url
 
 
-MERCARI_PAGES = 3   # 深く見るときのメルカリのページ数（1ページ約120件。新しい順なので、2ページ目以降は前からある出品）
+MERCARI_PAGES = 5   # 深く見るときのメルカリの最大ページ数（1ページ約120件。1ページに満たなくなったら終わり）
 
 
 def mercari_pages_for(kw):
@@ -2479,6 +2479,7 @@ def discover():
         waited = 0   # 在庫の見張りを待った時間（秒）
         order = [k for i, k in enumerate(keywords) if i % SHARDS == SHARD]   # 受け持ちの機種だけ（4本で分ける）
         random.Random(int(time.time() // 3600)).shuffle(order)   # 毎回ちがう順番で回る（時間切れでも、全部の機種を何回かに分けて探せる）
+        order.sort(key=lambda k: mercari_pages_for(k) == 1)   # 今の時間に深く見る機種を先に回す（時間切れで深い確認が抜けないように）
         for kw in order:
             if monitor_running() and waited < MAX_WAIT:
                 print("在庫の見張りが動いているので、終わるまで待ちます")
