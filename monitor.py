@@ -2197,19 +2197,29 @@ def create_listing(r, info, detail, settings, token):
 
 # ---------- 自動仕入れ候補さがし ----------
 SEARCH_JS = """async () => {
-    for (let i = 0; i < 5; i++) { window.scrollBy(0, 2000); await new Promise(r => setTimeout(r, 1200)); }
-    return [...document.querySelectorAll('a[href*="/item/m"], a[href*="/shops/product/"]')]
-        .filter(a => !a.getAttribute('href').includes('ad_id'))   // 広告枠は除く
-        .map(a => {
-            const img = a.querySelector('img');
-            const t = a.innerText.replace(/\\d+\\s*%\\s*OFF/gi, '');   // メルカリShopsの「6%OFF」を値段と間違えない
-            const ys = [...t.matchAll(/[¥￥]\\s*([\\d,]+)/g)].map(x => parseInt(x[1].replace(/,/g, ''), 10));
-            const m = ys.length ? [null, String(Math.min(...ys))] : t.match(/([\\d,]+)/);   // 値引き前と後があれば安いほう
-            return { auction: /現在/.test(a.innerText),   // オークションは「現在 ¥◯◯」と表示される
-                     url: 'https://jp.mercari.com' + a.getAttribute('href').split('?')[0],
-                     title: img ? img.alt.replace(/のサムネイル$/, '') : '',
-                     price: m ? parseInt(m[1].replace(/,/g, ''), 10) : null };
-        });
+    // スクロールしながら集める（画面外の商品は表示が消えることがあるため、見えたものを順に覚えておく）
+    const seen = new Map();
+    const grab = () => document.querySelectorAll('a[href*="/item/m"], a[href*="/shops/product/"]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (href.includes('ad_id')) return;   // 広告枠は除く
+        const url = 'https://jp.mercari.com' + href.split('?')[0];
+        const img = a.querySelector('img');
+        const t = a.innerText.replace(/\\d+\\s*%\\s*OFF/gi, '');   // メルカリShopsの「6%OFF」を値段と間違えない
+        const ys = [...t.matchAll(/[¥￥]\\s*([\\d,]+)/g)].map(x => parseInt(x[1].replace(/,/g, ''), 10));
+        const m = ys.length ? [null, String(Math.min(...ys))] : t.match(/([\\d,]+)/);   // 値引き前と後があれば安いほう
+        const title = img ? img.alt.replace(/のサムネイル$/, '') : '';
+        const price = m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+        if (!seen.has(url) || (!seen.get(url).title && title))
+            seen.set(url, { auction: /現在/.test(a.innerText), url, title, price });   // オークションは「現在 ¥◯◯」と表示される
+    });
+    for (let i = 0; i < 30; i++) {
+        grab();
+        window.scrollBy(0, 800);
+        await new Promise(r => setTimeout(r, 400));
+        if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 50 && i > 3) { await new Promise(r => setTimeout(r, 800)); grab(); break; }
+    }
+    grab();
+    return [...seen.values()];
 }"""
 
 
@@ -2277,20 +2287,56 @@ def excluded_sellers(data):
     return {seller_id(x.get("id")) for x in (data.get("excluded") or []) if seller_id(x.get("id"))}
 
 
-def yahoo_search(keyword):
-    r = requests.get(f"{YAHOO_API}/v1/search", headers=YAHOO_HEADERS, timeout=30,
-                     params={"query": keyword, "results": 100, "sort": "price", "order": "asc",
-                             "itemStatus": "open"})
-    r.raise_for_status()
-    out = []
-    for it in r.json().get("items", []):
-        if (it.get("category") or {}).get("id") not in YAHOO_OK_CATEGORIES:
-            continue          # 携帯電話本体以外（電池・ケースなど）は除く
-        if it.get("condition") == "used80":
-            continue          # 全体的に状態が悪い
-        out.append({"url": f"https://paypayfleamarket.yahoo.co.jp/item/{it['id']}",
-                    "title": it.get("title", ""), "price": it.get("price"), "seller": it.get("sellerId", "")})
+def yahoo_search(keyword, settings=None, max_price=None, max_items=500):
+    """Yahoo!フリマを安い順に検索（除外ワードは検索の時点で外す。上限の値段まで、最大500件まで2ページ目以降も見る）"""
+    q = keyword + "".join(f" -{w}" for w in search_exclude_words(settings))
+    out, offset = [], 0
+    while offset < max_items:
+        r = requests.get(f"{YAHOO_API}/v1/search", headers=YAHOO_HEADERS, timeout=30,
+                         params={"query": q, "results": 100, "sort": "price", "order": "asc",
+                                 "itemStatus": "open", "offset": offset})
+        r.raise_for_status()
+        items = r.json().get("items", [])
+        for it in items:
+            if (it.get("category") or {}).get("id") not in YAHOO_OK_CATEGORIES:
+                continue          # 携帯電話本体以外（電池・ケースなど）は除く
+            if it.get("condition") == "used80":
+                continue          # 全体的に状態が悪い
+            out.append({"url": f"https://paypayfleamarket.yahoo.co.jp/item/{it['id']}",
+                        "title": it.get("title", ""), "price": it.get("price"), "seller": it.get("sellerId", "")})
+        if len(items) < 100 or (max_price and (items[-1].get("price") or 0) > max_price):
+            break             # 最後のページ、または仕入れ上限より高くなったら終わり
+        offset += 100
+        time.sleep(1)
     return out
+
+
+# 検索の時点で外すワード（メルカリ・Yahoo!フリマとも、商品名と説明文の両方が対象）
+# 設定シートB17で変えられる。説明文にもよく出る言葉（ケース・保護など）は入れない（まともな出品まで消えるため）
+SEARCH_EXCLUDE_DEFAULT = ["ジャンク", "部品取り", "パーツ取り", "動作未確認", "通電のみ", "通電確認のみ",
+                          "ガラクタ", "訳あり", "訳アリ", "不動品", "電源入らない"]
+
+
+def search_exclude_words(settings):
+    v = str((settings or {}).get("search_exclude") or "").strip()
+    words = [w.strip() for w in re.split(r"[,、\s]+", v) if w.strip()] if v else SEARCH_EXCLUDE_DEFAULT
+    return words[:20]
+
+
+def mercari_search_url(kw, gi, settings, page_no=0):
+    """メルカリの検索URL（新しい順・本体カテゴリ・通常出品のみ・除外ワード付き・page_noページ目）"""
+    url = ("https://jp.mercari.com/search?status=on_sale&sort=created_time&order=desc"
+           f"&category_id={gi['mercari'] if gi else '860'}&keyword="
+           + ("" if gi and gi.get("exact") else requests.utils.quote(kw)) + MERCARI_FIXED)   # 機種別カテゴリなら検索語なし
+    ex = search_exclude_words(settings)
+    if ex:
+        url += "&exclude_keyword=" + requests.utils.quote(" ".join(ex))
+    if page_no:
+        url += "&page_token=" + requests.utils.quote(f"v1:{page_no}")
+    return url
+
+
+MERCARI_PAGES = 3   # 候補さがしで見るメルカリのページ数（1ページ約120件。新しい順なので、2ページ目以降は前からある出品）
 
 
 ACCESSORY_WORDS = ["説明書", "取説", "取扱", "充電器", "充電台", "卓上ホルダ", "卓上ホルダー", "アダプタ", "ACアダプ",
@@ -2412,6 +2458,7 @@ def discover():
     excluded = excluded_sellers(data)
 
     found, seen, checked = [], set(), 0
+    pages_seen = [0]   # メルカリで見たページ数（記録用）
     load_market_cache()   # 前回までに調べたeBay相場（6時間以内）を使い回す
     t0 = time.time()
     with sync_playwright() as pw:
@@ -2436,15 +2483,19 @@ def discover():
                 print(f"時間切れ（{DISCOVER_BUDGET // 60}分）のため、残りの機種は次回に回します")
                 break
             gi = game_info(kw)
-            url = ("https://jp.mercari.com/search?status=on_sale&sort=created_time&order=desc"
-                   f"&category_id={gi['mercari'] if gi else '860'}&keyword="
-                   + ("" if gi and gi.get("exact") else requests.utils.quote(kw)) + MERCARI_FIXED)   # 本体カテゴリ・通常出品のみ（機種別カテゴリなら検索語なし）
-            try:
-                page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                page.wait_for_selector('a[href*="/item/m"], a[href*="/shops/product/"]', timeout=25000)
-                items = page.evaluate(SEARCH_JS)
-            except Exception:
-                continue
+            items = []
+            for pno in range(MERCARI_PAGES):   # 1ページ目（新着）だけでなく、前からある出品も見る
+                try:
+                    page.goto(mercari_search_url(kw, gi, settings, pno), wait_until="domcontentloaded", timeout=45000)
+                    page.wait_for_selector('a[href*="/item/m"], a[href*="/shops/product/"]', timeout=25000)
+                    got = page.evaluate(SEARCH_JS)
+                except Exception:
+                    break
+                items += got
+                pages_seen[0] += 1
+                if len(got) < 100:   # 1ページに満たない＝最後のページ
+                    break
+                time.sleep(random.uniform(3, 5))
             for it in items:
                 u = it["url"]
                 if u in known or u in seen or not it["price"] or it.get("auction") or it["price"] > max_cost(settings):
@@ -2471,7 +2522,7 @@ def discover():
                                   "result": f"自動発見 {now()}"})
             # Yahoo!フリマも同じキーワードで探す
             try:
-                yitems = yahoo_search(gi.get("yahoo_q", kw) if gi else kw)
+                yitems = yahoo_search(gi.get("yahoo_q", kw) if gi else kw, settings, max_cost(settings))
             except Exception:
                 yitems = []
             for it in yitems:
@@ -2527,7 +2578,7 @@ def discover():
         sheet("append", rows=added)
         best = added[0]
         notify(f"【仕入れ候補】{len(added)}件を追加しました。最高：{best['title'][:30]} 想定利益 {best['profit']:,}円（{best['margin']}%）")
-    msg = (f"{now()} 候補さがし：{checked}件を計算、条件に合う{len(found)}件のうち{len(added)}件を追加"
+    msg = (f"{now()} 候補さがし：メルカリ{pages_seen[0]}ページ・{len(seen)}件を確認、{checked}件を計算、条件に合う{len(found)}件のうち{len(added)}件を追加"
            f"（{(time.time() - t0) / 60:.0f}分・相場は{_market_stats['hit']}件を使い回し、{_market_stats['miss']}件を新しく取得）")
     print(msg)
     sheet("log", message=msg)
