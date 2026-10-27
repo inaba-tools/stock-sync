@@ -1294,6 +1294,8 @@ def _main():
                     upd["result"] = f"【待機】今月の無料出品枠（{FREE_LISTINGS}件）を使い切ったため、来月1日まで出品を待ちます"
                 elif status == "on_sale" and info and day_full:
                     upd["result"] = f"【待機】今日の出品ペースの上限（{day_cap(free_used)}件）に達したため、明日以降に出品します"
+                elif status == "on_sale" and info and listed >= list_cap(settings):
+                    upd["result"] = f"【待機】1回の出品は{list_cap(settings)}件までのため、次の回（30分後）に出品します"
                 elif status == "on_sale" and info and quota_hit \
                         and not swap_out(None, expected_profit(info.get("price"), r.get("query"), settings)):
                     upd["result"] = "【待機】eBayの月間出品枠の上限のため、枠が空くまで待ちます"
@@ -1982,6 +1984,17 @@ PT = ZoneInfo("America/Los_Angeles")   # eBayの月の区切り（米国太平�
 FREE_TODAY = {"new": 0, "days_left": 30}
 
 
+def list_cap(settings):
+    """30分ごとの見張り1回でeBayに出品する最大件数（設定シートB15）"""
+    try:
+        return max(1, int(float(settings.get("max_add") or 20)))
+    except (TypeError, ValueError):
+        return 20
+
+
+CANDIDATE_POOL_MAX = 100   # 出品待ちの候補（まだeBayに出していない行）はシート全体でこれまで。見張りが30分に間に合うように
+
+
 def day_cap(free_used):
     """今日出してよい新しい出品の件数：残りの無料枠を月末までの日数で割る（月の途中で枠を使い切らないため）"""
     left = (FREE_LISTINGS - FREE_MARGIN) - free_used + FREE_TODAY["new"]
@@ -2460,7 +2473,10 @@ def discover():
     KNOWN_MODELS[:] = keywords
     min_margin = 0   # 2026/10/22 利益率の条件はやめて、利益2,000円以上かどうかだけで判断する（設定シートB13は使わない）
     min_profit = float(settings.get("min_profit") or 1500)
-    max_add = int(float(settings.get("max_add") or 5))
+    # シートへの追加は20件に限らない（出品の件数は見張り側で1回B15件まで）。ただし出品待ちの候補が多すぎると見張りが遅れるので、
+    # 出品待ちはシート全体で CANDIDATE_POOL_MAX 件まで（4本で分ける）。追加できなかった候補は、次の回にまた見つかる
+    pending = sum(1 for r in data["rows"] if not r.get("ebay_item_id") and r.get("status") in ("", "active"))
+    max_add = max(0, (CANDIDATE_POOL_MAX - pending) // max(1, SHARDS))
     exclude = [w.strip() for w in re.split(r"[,、\n]", str(settings.get("exclude") or "")) if w.strip()]
     excluded = excluded_sellers(data)
 
@@ -2575,13 +2591,13 @@ def discover():
     found.sort(key=lambda x: (SOLD90.get(x["query"], 0), x["profit"]), reverse=True)
     added = []
     for x in found:
+        if len(added) >= max_add:
+            break
         k = model_key(x["query"])
         if per_model.get(k, 0) >= cap_for(x["query"]):
             continue
         per_model[k] = per_model.get(k, 0) + 1
         added.append(x)
-        if len(added) >= max_add:
-            break
     if added:
         sheet("append", rows=added)
         best = added[0]
