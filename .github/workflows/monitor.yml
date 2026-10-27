@@ -20,6 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 全部見る回を1回だけ起動（.github/full_scan_once があり、その日時以降にまだ手動実行していないとき）
+        if: hashFiles('.github/full_scan_once') != ''
+        continue-on-error: true
+        run: |
+          since=$(cat .github/full_scan_once)
+          n=$(gh api "repos/${{ github.repository }}/actions/workflows/discover.yml/runs?event=workflow_dispatch&created=%3E%3D${since}" --jq '.total_count')
+          echo "全部見る回の実行回数（${since}以降）：${n}"
+          if [ "$n" = "0" ]; then gh workflow run discover.yml -R "${{ github.repository }}" -f full=true; echo "全部見る回を起動しました"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
