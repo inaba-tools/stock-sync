@@ -2352,9 +2352,14 @@ def mercari_search_url(kw, gi, settings, page_no=0):
 MERCARI_PAGES = 5   # 深く見るときのメルカリの最大ページ数（1ページ約120件。1ページに満たなくなったら終わり）
 
 
+FULL_SCAN = os.environ.get("FULL_SCAN") == "1"   # 手動の「全部見る回」：時間の上限なしで、全機種を最後のページまで見る
+
+
 def mercari_pages_for(kw):
     """ふだんは1ページ目（新着）だけ。機種ごとに1日1回だけ3ページまで見る（前からある出品の値下げを拾う）。
     機種ごとに見る時間をずらして、1回の候補さがしが重くならないようにする"""
+    if FULL_SCAN:
+        return 50   # 1ページに満たなくなったら終わる（最後のページまで）
     h = sum(ord(c) for c in kw) % 24
     return MERCARI_PAGES if datetime.now(JST).hour == h else 1
 
@@ -2477,6 +2482,8 @@ def discover():
     # 出品待ちはシート全体で CANDIDATE_POOL_MAX 件まで（4本で分ける）。追加できなかった候補は、次の回にまた見つかる
     pending = sum(1 for r in data["rows"] if not r.get("ebay_item_id") and r.get("status") in ("", "active"))
     max_add = max(0, (CANDIDATE_POOL_MAX - pending) // max(1, SHARDS))
+    if FULL_SCAN:
+        max_add = 10000   # 全部見る回は取りこぼさないよう上限なし（同じ機種は3件までのルールは同じ）
     exclude = [w.strip() for w in re.split(r"[,、\n]", str(settings.get("exclude") or "")) if w.strip()]
     excluded = excluded_sellers(data)
 
@@ -2503,7 +2510,7 @@ def discover():
                 while monitor_running() and waited + (time.time() - w0) < MAX_WAIT:
                     time.sleep(20)   # 在庫の見張りを優先（同時にメルカリを見に行くと、見張りが判定できなくなることがある）
                 waited += time.time() - w0
-            if time.time() - t0 - waited > DISCOVER_BUDGET:   # 待った時間は探す時間に数えない
+            if not FULL_SCAN and time.time() - t0 - waited > DISCOVER_BUDGET:   # 待った時間は探す時間に数えない（全部見る回は上限なし）
                 print(f"時間切れ（{DISCOVER_BUDGET // 60}分）のため、残りの機種は次回に回します")
                 break
             gi = game_info(kw)
@@ -2546,7 +2553,8 @@ def discover():
                                   "result": f"自動発見 {now()}"})
             # Yahoo!フリマも同じキーワードで探す
             try:
-                yitems = yahoo_search(gi.get("yahoo_q", kw) if gi else kw, settings, max_cost(settings))
+                yitems = yahoo_search(gi.get("yahoo_q", kw) if gi else kw, settings, max_cost(settings),
+                                      max_items=5000 if FULL_SCAN else 500)
             except Exception:
                 yitems = []
             for it in yitems:
@@ -2602,7 +2610,7 @@ def discover():
         sheet("append", rows=added)
         best = added[0]
         notify(f"【仕入れ候補】{len(added)}件を追加しました。最高：{best['title'][:30]} 想定利益 {best['profit']:,}円（{best['margin']}%）")
-    msg = (f"{now()} 候補さがし：メルカリ{pages_seen[0]}ページ・{len(seen)}件を確認、{checked}件を計算、条件に合う{len(found)}件のうち{len(added)}件を追加"
+    msg = (f"{now()} {'【全部見る回】' if FULL_SCAN else ''}候補さがし：メルカリ{pages_seen[0]}ページ・{len(seen)}件を確認、{checked}件を計算、条件に合う{len(found)}件のうち{len(added)}件を追加"
            f"（{(time.time() - t0) / 60:.0f}分・相場は{_market_stats['hit']}件を使い回し、{_market_stats['miss']}件を新しく取得）")
     print(msg)
     sheet("log", message=msg)

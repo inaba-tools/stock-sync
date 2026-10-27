@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "23 * * * *"   # 1時間ごと（GitHubの混雑で数分〜十数分遅れることがあります）
   workflow_dispatch:
+    inputs:
+      full:
+        description: "全部見る（メルカリ・Yahoo!フリマを最後のページまで。1回だけの手動実行用）"
+        type: boolean
+        default: false
 
 concurrency:
   group: discover   # 在庫監視とは別に動く（待たされない）
@@ -16,7 +21,7 @@ permissions:
 jobs:
   discover:
     runs-on: ubuntu-latest
-    timeout-minutes: 45   # 探す18分＋在庫の見張りを待つ最大18分＋準備
+    timeout-minutes: ${{ inputs.full && 300 || 45 }}   # ふだん：探す18分＋在庫の見張りを待つ最大18分＋準備／全部見る回：最大5時間
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +49,7 @@ jobs:
         run: python monitor.py discover
         env:
           SHARDS: "4"
+          FULL_SCAN: ${{ inputs.full && '1' || '' }}   # 全部見る回だけ "1"
           GH_TOKEN: ${{ github.token }}   # 在庫の見張りが動いているかを確かめる（動いている間は待つ）
           SHARD: ${{ matrix.shard }}
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
