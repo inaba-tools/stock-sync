@@ -1395,6 +1395,8 @@ def _main():
                         notify(f"【出品】{res['title_en']} ${res['price']:.2f}（eBay {res['ebay_item_id']}）")
                     elif err == "WAIT":
                         upd["result"] = f"【待機】今月の無料出品枠（{FREE_LISTINGS}件）を使い切ったため、来月1日まで出品を待ちます"
+                    elif err == "LIMITWAIT":
+                        upd["result"] = "【待機】eBayの相場の問い合わせ上限に達したため、次の回に出品します"
                     elif err == "DAYWAIT":
                         upd["result"] = f"【待機】今日の出品ペースの上限（{day_cap(free_used)}件）に達したため、明日以降に出品します"
                     elif err and err.startswith("SKIP:"):
@@ -2260,6 +2262,8 @@ def create_listing(r, info, detail, settings, token):
         t["model"], t["unlocked"], t["carrier"], t["color"], t["title_en"], t["cond_en"], t["desc_html"])
     target, floor = market_price_usd(cost, model, settings)
     if target is None:
+        if EBAY_LIMITED[0]:
+            return None, "LIMITWAIT"   # eBayの1日の問い合わせ上限：外さずに次の回で出品する
         return None, "SKIP:eBayの相場が取れないため出品しません"
     if target < floor_price_usd(cost, model, settings, min_profit_for(cost, settings, model)):
         return None, f"SKIP:相場(${target:.2f})では利益{int(min_profit_for(cost, settings, model)):,}円が残らないため出品しません"
