@@ -2328,11 +2328,13 @@ SEARCH_JS = """async () => {
         const img = a.querySelector('img');
         const t = a.innerText.replace(/\\d+\\s*%\\s*OFF/gi, '');   // メルカリShopsの「6%OFF」を値段と間違えない
         const ys = [...t.matchAll(/[¥￥]\\s*([\\d,]+)/g)].map(x => parseInt(x[1].replace(/,/g, ''), 10));
-        const m = ys.length ? [null, String(Math.min(...ys))] : t.match(/([\\d,]+)/);   // 値引き前と後があれば安いほう
+        // 値段は「¥」の付いた数字だけを使う（表示しきれていないときに、いいね数などを値段と間違えないように）
+        const price = ys.length ? Math.min(...ys) : null;   // 値引き前と後があれば安いほう
         const title = img ? img.alt.replace(/のサムネイル$/, '') : '';
-        const price = m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
-        if (!seen.has(url) || (!seen.get(url).title && title))
-            seen.set(url, { auction: /現在/.test(a.innerText), url, title, price });   // オークションは「現在 ¥◯◯」と表示される
+        const old = seen.get(url);
+        if (!old || (!old.price && price) || (!old.title && title))
+            seen.set(url, { auction: /現在/.test(a.innerText), url, title: title || (old && old.title) || '',
+                            price: price || (old && old.price) || null });   // オークションは「現在 ¥◯◯」と表示される
     });
     for (let i = 0; i < 30; i++) {
         grab();
@@ -2638,7 +2640,8 @@ def discover():
                 time.sleep(random.uniform(3, 5))
             for it in items:
                 u = it["url"]
-                if u in known or u in seen or not it["price"] or it.get("auction") or it["price"] > max_cost(settings):
+                if u in known or u in seen or not it["price"] or it.get("auction") or it["price"] > max_cost(settings) \
+                        or it["price"] < 500:   # 500円未満は読み取りミスか付属品（2026/10/28）
                     continue
                 seen.add(u)
                 if any(w in it["title"] for w in exclude) or reserved_reason(it["title"]):
