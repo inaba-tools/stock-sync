@@ -1284,8 +1284,7 @@ def _main():
                     try:
                         q = (r.get("query") or "").strip()
                         target, floor = market_price_usd(info["price"], q, settings)
-                        if floor is None:
-                            floor = floor_price_usd(info["price"], q, settings)
+                        floor = item_floor(info["price"], q, settings, target, r.get("listed_at") or "2000-01-01")
                         act = active_items.get(r["ebay_item_id"], {})
                         if "watch" in act:
                             upd["watch"] = act["watch"]
@@ -1720,6 +1719,29 @@ def build_title(model, title, carrier, unlocked, color):
 
 
 PRICE_FLOOR_PROFIT = 2000   # 出品価格はこの利益（円）が残る値段より下げない
+# 2026/10/28 利益1,000〜2,000円の商品も出品する（最低利益は設定シートの「最低の利益額」）。
+# この時刻より前に出品したものは今まで通り利益2,000円の値段のまま。これ以降に出品したものは、
+# 相場が利益2,000円の値段より安ければ相場の値段（ただし最低利益が残る値段より下げない）で出す。
+LOW_TIER_START = "2026-10-28 19:00"
+
+
+def item_floor(cost, query, settings, target, listed_at=""):
+    """その出品の下限価格（出品・値下げで使う）"""
+    floor2000 = floor_price_usd(cost, query, settings)
+    s = str(listed_at or "").strip()
+    if s:
+        try:
+            if "T" in s:   # シートから日時の形で来た場合（UTC）は日本時間に直す
+                s = datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(JST).strftime("%Y-%m-%d %H:%M")
+            s = s.replace("/", "-")[:16]
+        except ValueError:
+            s = "2000-01-01"
+        if s < LOW_TIER_START:
+            return floor2000   # 以前からの出品：今まで通り
+    floor_min = floor_price_usd(cost, query, settings, min_profit_for(cost, settings, query))
+    if target is None:
+        return floor2000
+    return max(min(round(target, 2), floor2000), floor_min)
 NEW_LISTING_DAYS = 3        # 出品から3日間は相場の値段で様子を見る
 WATCH_STEP_USD = 2.0        # ウォッチされている商品は $2（約300円）ずつ値下げ（2026/10/22 $0.5→$2）
 WATCH_INTERVAL_H = 3        # 値下げの間隔（時間）（2026/10/22 1時間→3時間）
@@ -1780,8 +1802,10 @@ def expected_profit(cost, query, settings):
     """候補を今出品したときに見込める利益（円）。相場が取れなければ None"""
     try:
         target, floor = market_price_usd(float(cost), (query or "").strip(), settings)
-        if target is None or target < floor:
+        if target is None or target < floor_price_usd(float(cost), (query or "").strip(), settings,
+                                                      min_profit_for(cost, settings, query)):
             return None
+        target = min(target, floor)   # 出品する値段（利益2,000円の値段が上限）
         fx = usd_jpy(settings)
         fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
         return target * fx * (1 - fee) - float(settings.get("ship_jpy") or 3000) - float(cost)
@@ -2267,7 +2291,7 @@ def create_listing(r, info, detail, settings, token):
         return None, "SKIP:eBayの相場が取れないため出品しません"
     if target < floor_price_usd(cost, model, settings, min_profit_for(cost, settings, model)):
         return None, f"SKIP:相場(${target:.2f})では利益{int(min_profit_for(cost, settings, model)):,}円が残らないため出品しません"
-    price = floor   # 2026/10/26 出品するときから利益2,000円の値段で出す（相場の値段では出さない）
+    price = item_floor(cost, model, settings, target)   # 利益2,000円の値段。相場がそれより安ければ相場の値段（最低利益は残す）
     pics = upload_pictures(detail.get("images", []), token)
     if not pics:
         return None, "写真をeBayに取り込めなかったため出品を中止しました（もう一度チェックすると再挑戦します）"
