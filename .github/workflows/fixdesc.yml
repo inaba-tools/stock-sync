@@ -32,8 +32,8 @@ jobs:
 
       - run: python -m playwright install --with-deps chromium
 
-      - name: 同じ商品の写真の確認（何も変更しない）
-        run: python monitor.py dupdebug 366747044665
+      - name: ガラケーとして出てしまった富士フイルムのカメラ4件の出品を終了（2026/10/28）
+        run: python monitor.py end 366766789253 366766789398 366766789579 366766789832
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
