@@ -701,16 +701,86 @@ GAMES["IXY-650"]["ebay_q"] = "Canon PowerShot ELPH 360 HS"   # eBayでは主に�
 GAMES["IXY-180"]["ebay_q"] = "Canon PowerShot ELPH 180"
 # カメラ・MDのメーカー名（ほかのメーカー名が商品名にあれば、同じ型番の別商品として外す）
 CAMERA_BRANDS = {
-    "Sony": r"ソニー|SONY|CYBER-?SHOT|サイバーショット|WALKMAN|ウォークマン",
+    "Sony": r"ソニー|SONY|CYBER-?SHOT|サイバーショット|WALKMAN|ウォークマン|DISCMAN|ディスクマン|HANDYCAM|ハンディカム",
     "Nikon": r"ニコン|NIKON|COOLPIX|クールピクス",
     "Canon": r"キヤノン|キャノン|CANON|IXY|POWERSHOT|パワーショット",
     "Fujifilm": r"富士フイルム|富士フィルム|フジフイルム|フジフィルム|FUJI|FINEPIX|ファインピクス",
     "Olympus": r"オリンパス|OLYMPUS",
-    "Panasonic": r"パナソニック|PANASONIC|LUMIX|ルミックス",
-    "Casio": r"カシオ|CASIO|EXILIM|エクシリム",
-    "Pentax": r"ペンタックス|PENTAX|リコー|RICOH",
+    "Panasonic": r"パナソニック|PANASONIC|LUMIX|ルミックス|SHOCKWAVE|ショックウェーブ",
+    "Casio": r"カシオ|CASIO|EXILIM|エクシリム|G-?SHOCK|Gショック|ジーショック",
+    "Pentax": r"ペンタックス|PENTAX",
+    "Ricoh": r"リコー|RICOH",   # 2026/10/28 リコーのデジカメを扱うためペンタックスと分けた
     "Kodak": r"コダック|KODAK",
+    "Seiko": r"セイコー|SEIKO",
+    "Citizen": r"シチズン|CITIZEN",
+    "Aiwa": r"アイワ|AIWA",
+    "Victor": r"ビクター|VICTOR|JVC",
 }
+
+
+# ---------- 2026/10/28 追加ジャンル：CCDデジカメ（他メーカー）・カセット/CDウォークマン・ビデオカメラ・時計 ----------
+# 型番の書き方がゆれる・型番が短いものは alias（呼び名の正規表現）でも見分ける。メーカー名が商品名にないものは外す（need_brand）
+# ship：送料の見込み（円）。設定シートの送料より高いときだけ使う（ビデオカメラは箱が大きく重いので高め）
+NEW_GENRES = {
+    "camera": {"mercari": "4007", "ebay_cat": "31388", "yahoo": 19801},
+    "cassette": {"mercari": "3952", "ebay_cat": "15053", "yahoo": 49489},
+    "cd": {"mercari": "3950", "ebay_cat": "15054", "yahoo": 49487},
+    "video": {"mercari": "4012", "ebay_cat": "11724", "yahoo": 49429, "ship": 5000},
+    "watch": {"mercari": "39", "ebay_cat": "31387", "yahoo": 1647},
+}
+
+
+def _code_re(code):
+    """型番 → 区切り（ハイフン・空白）のゆれを許す正規表現"""
+    return r"[-\s]?".join(re.escape(c) for c in re.sub(r"[-\s]", "", code.upper()))
+
+
+def _add_new(keyword, kind, brand, series, ebay_q, code=None, brand_re=None, suffix="", **extra):
+    """keyword：設定シートの検索キーワード（メルカリの検索語）。code：商品名に出てくる型番"""
+    g = NEW_GENRES[kind]
+    code = code or keyword
+    gi = {"kind": kind, "brand": brand, "platform": series, "series": f"{series} {code}", "ser_name": series,
+          "mercari": g["mercari"], "ebay_cat": g["ebay_cat"], "ebay_q": ebay_q, "yahoo_q": keyword,
+          "need_brand": True, "code": code}
+    pre = rf"(?:{brand_re})[^\n]{{0,20}}?" if brand_re else ""
+    gi["alias"] = pre + r"(?<![A-Z0-9])" + _code_re(code) + (f"(?:{suffix})?" if suffix else "") + r"(?![A-Z0-9])"
+    if g.get("ship"):
+        gi["ship"] = g["ship"]
+    gi.update(extra)
+    GAMES[keyword.upper().replace(" ", "-")] = gi
+
+
+_FUJI = r"FINEPIX|ファインピクス|富士フ[イィ]ルム|FUJIFILM"
+for _c in ("F31fd", "F30", "F200EXR", "F100fd", "Z1", "Z3", "Z5fd", "F70EXR", "J10", "Z200fd"):
+    _add_new(f"FinePix {_c}", "camera", "Fujifilm", "Fujifilm FinePix", f"Fujifilm FinePix {_c}", code=_c, brand_re=_FUJI)
+for _c in ("DMC-FX01", "DMC-FX07", "DMC-FX9", "DMC-FX35", "DMC-FX37", "DMC-FX33", "DMC-FS7", "DMC-FX30", "DMC-FX40"):
+    _add_new(_c, "camera", "Panasonic", "Panasonic Lumix", f"Panasonic Lumix {_c}")
+    GAMES[_c]["alias"] = rf"(?:LUMIX|ルミックス)[^\n]{{0,15}}?(?<![A-Z0-9])(?:DMC-?)?{_code_re(_c[4:])}(?![A-Z0-9])|" + GAMES[_c]["alias"]
+for _c in ("EX-Z1000", "EX-Z850", "EX-S600", "EX-Z750", "EX-S500", "EX-Z500", "EX-Z3", "EX-Z55", "EX-S770", "EX-Z100"):
+    _add_new(_c, "camera", "Casio", "Casio Exilim", f"Casio Exilim {_c}")
+for _c in ("CX1", "CX2", "CX3", "CX4", "R10"):
+    _add_new(f"RICOH {_c}", "camera", "Ricoh", "Ricoh", f"Ricoh {_c}", code=_c, brand_re=r"RICOH|リコー")
+for _c in ("WM-EX1", "WM-EX2", "WM-EX5", "WM-EX9", "WM-EX20", "WM-EX600", "WM-EX610", "WM-EX615", "WM-EX631",
+           "WM-EX651", "WM-EX655", "WM-EX677", "WM-EX808", "WM-EX900", "WM-EX910", "WM-EX921"):
+    _add_new(_c, "cassette", "Sony", "Sony Walkman", f"Sony Walkman {_c}")
+for _c in ("D-NE730", "D-NE830", "D-NE920", "D-NE10", "D-NE20", "D-EJ1000", "D-EJ955", "D-E01", "D-NE1", "D-EJ800"):
+    _add_new(_c, "cd", "Sony", "Sony Discman", f"Sony Discman {_c}")
+for _c in ("SL-CT520", "SL-CT820"):
+    _add_new(_c, "cd", "Panasonic", "Panasonic", f"Panasonic {_c}")
+for _c, _sx in (("HDR-CX370", "V"), ("HDR-CX590", "V"), ("HDR-CX420", ""), ("HDR-TG1", ""),
+                ("DCR-PC101", ""), ("DCR-PC300", "K"), ("DCR-PC350", "")):
+    _add_new(_c, "video", "Sony", "Sony Handycam", f"Sony Handycam {_c}", suffix=_sx)
+for _c, _mv in (("SARB033", "Automatic"), ("SARB035", "Automatic"), ("SARB017", "Automatic"),
+                ("SARB059", "Automatic"), ("SARB065", "Automatic"), ("SARY055", "Automatic")):
+    _add_new(_c, "watch", "Seiko", "Seiko", f"Seiko {_c}", movement=_mv, display="Analog")
+for _c, _mv, _sx in (("GW-M5610", "Quartz (Solar)", "U"), ("GW-5000", "Quartz (Solar)", "U"),
+                     ("DW-5000", "Quartz", ""), ("GW-B5600", "Quartz (Solar)", "")):
+    _add_new(_c, "watch", "Casio", "Casio G-Shock", f"Casio G-Shock {_c}", suffix=_sx, movement=_mv, display="Digital")
+NEW_KINDS = {"cassette", "cd", "video", "watch"}
+# 時計：偽物・部品だけの出品を外す（商品名で判断）
+WATCH_FAKE_RE = re.compile(r"レプリカ|コピー|スーパーコピー|偽物|風(?![防])|タイプ|互換|オマージュ|カスタム|MOD|"
+                           r"(ベルト|バンド|ケース|ベゼル|風防|ガラス|文字盤|ムーブメント|箱|保証書)(のみ|だけ|単品)|部品|パーツ", re.I)
+WATCH_MIN_PRICE_RATIO = 0.3   # 時計は相場のこの割合未満なら偽物・故障の可能性が高い
 
 
 def brand_reject_reason(t, gi):
@@ -733,7 +803,7 @@ OTHER_HARD_WORDS = re.compile(
 
 def match_game(title, key):
     """商品名がその機種か（型番が書いてあるか、呼び名が合っていて別機種の名前がない）"""
-    gi = GAMES.get(key)
+    gi = GAMES.get(key) or game_info(key)   # 2026/10/28 「FinePix F31fd」のような空白入りのキーワードでも見つける
     t = unicodedata.normalize("NFKC", title or "").upper()
     if has_model(t, key):
         return True
@@ -819,15 +889,21 @@ def game_reject_reason(title, model, price_jpy=None, sale_usd=None, settings=Non
     t = unicodedata.normalize("NFKC", title or "")
     if not match_game(t, model):
         return "商品名に機種名がありません"
-    if (game_info(model) or {}).get("kind") in ("camera", "md"):
+    kind = (game_info(model) or {}).get("kind")
+    if kind in ("camera", "md") or kind in NEW_KINDS:
         why = brand_reject_reason(t, game_info(model))
         if why:
             return why
         m = OTHER_HARD_WORDS.search(t)
         if m:
             return f"本体ではない・動かない可能性（{m.group(0)}）"
+        if kind == "watch":
+            m = WATCH_FAKE_RE.search(t)
+            if m:
+                return f"偽物・部品の可能性（{m.group(0)}）"
+        ratio = WATCH_MIN_PRICE_RATIO if kind == "watch" else GAME_MIN_PRICE_RATIO
         try:
-            if price_jpy and sale_usd and float(price_jpy) < float(sale_usd) * usd_jpy(settings or {}) * GAME_MIN_PRICE_RATIO:
+            if price_jpy and sale_usd and float(price_jpy) < float(sale_usd) * usd_jpy(settings or {}) * ratio:
                 return "相場に比べて安すぎる（部品・ジャンクの可能性）"
         except (TypeError, ValueError):
             pass
@@ -975,11 +1051,17 @@ def duty_pct(settings):
         return DUTY_PCT
 
 
+def ship_for(settings, model=""):
+    """送料の見込み（円）。設定シートの送料と、ジャンルごとの送料（重い・箱が大きいもの）の高いほう"""
+    base = float(settings.get("ship_jpy") or 3000)
+    return max(base, float((game_info(model or "") or {}).get("ship") or 0))
+
+
 def profit(cost_jpy, sale_usd, settings, model=""):
     sale_usd = adj(sale_usd, settings)
     fx = usd_jpy(settings)
     fee = float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + ad_pct(model) + duty_pct(settings)
-    ship = float(settings.get("ship_jpy") or 3000)
+    ship = ship_for(settings, model)
     revenue = sale_usd * fx
     p = revenue * (1 - fee / 100) - ship - cost_jpy
     return round(p), (round(p / revenue * 100, 1) if revenue else 0)
@@ -1236,7 +1318,7 @@ def _main():
                     p_txt = ""
                     if s.get("usd"):
                         fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100 + duty_pct(settings) / 100
-                        p = s["usd"] * usd_jpy(settings) * (1 - fee) - float(settings.get("ship_jpy") or 3000) - info["price"]
+                        p = s["usd"] * usd_jpy(settings) * (1 - fee) - ship_for(settings, r.get("query")) - info["price"]
                         p_txt = f"・見込み利益 約{int(p):,}円"
                         upd["profit"] = round(p)
                     upd["cost"] = info["price"]
@@ -1309,7 +1391,7 @@ def _main():
                             fx = usd_jpy(settings)
                             fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100 + duty_pct(settings) / 100
                             rev = new_price * fx
-                            p = rev * (1 - fee) - float(settings.get("ship_jpy") or 3000) - info["price"]
+                            p = rev * (1 - fee) - ship_for(settings, r.get("query")) - info["price"]
                             upd["cost"] = info["price"]
                             upd["profit"] = round(p)
                             listed_profit[r["row"]] = (model_key(r.get("query")), p, r["ebay_item_id"])
@@ -1751,7 +1833,7 @@ def floor_price_usd(cost, query, settings, profit=None):
     """利益がちょうど profit 円（省略時は2,000円）残る値段。2026/10/26 出品・値下げはすべてこの値段にそろえる"""
     fx = usd_jpy(settings)
     fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
-    ship = float(settings.get("ship_jpy") or 3000)
+    ship = ship_for(settings, query)
     min_profit = PRICE_FLOOR_PROFIT if profit is None else profit
     return math.ceil((cost + ship + min_profit) / max(0.05, 1 - fee) / fx) - 0.01
 
@@ -1808,7 +1890,7 @@ def expected_profit(cost, query, settings):
         target = min(target, floor)   # 出品する値段（利益2,000円の値段が上限）
         fx = usd_jpy(settings)
         fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
-        return target * fx * (1 - fee) - float(settings.get("ship_jpy") or 3000) - float(cost)
+        return target * fx * (1 - fee) - ship_for(settings, query) - float(cost)
     except (TypeError, ValueError):
         return None
 
@@ -1957,7 +2039,13 @@ def item_kind(title):
     t = (title or "").lower()
     if re.search(r"flip phone|keitai|feature phone|cell ?phone|mobile phone", t):
         return "ガラケー"
-    if re.search(r"camera|cyber-?shot|coolpix|ixy|lumix|exilim", t):
+    if re.search(r"camcorder|handycam", t):
+        return "ビデオカメラ"
+    if re.search(r"cassette player|cd player|discman", t):
+        return "カセット・CDプレーヤー"
+    if re.search(r"\bwatch\b|g-shock|seiko", t):
+        return "時計"
+    if re.search(r"camera|cyber-?shot|coolpix|ixy|lumix|exilim|finepix|ricoh", t):
         return "デジカメ"
     if re.search(r"walkman|minidisc|mini disc|\bmd\b", t):
         return "MDプレーヤー"
@@ -2193,7 +2281,8 @@ def clean_desc(text):
     return "\n".join(lines)[:1500]
 
 
-PHONE_CATEGORY = re.compile(r"携帯電話本体|スマートフォン本体|PHS本体|本体[(（]|テレビゲーム.*>\s*本体|コンパクトデジタルカメラ|ポータブルMDプレーヤー")
+PHONE_CATEGORY = re.compile(r"携帯電話本体|スマートフォン本体|PHS本体|本体[(（]|テレビゲーム.*>\s*本体|コンパクトデジタルカメラ|ポータブルMDプレーヤー|"
+                            r"ポータブルCDプレーヤー|CDプレーヤー|カセットプレーヤー|ビデオカメラ|時計|デジタルカメラ")
 
 
 def not_a_phone(r, title_jp, detail):
@@ -2225,7 +2314,8 @@ def prepare_text(r, info, detail):
         next((en for jp, en in COLORS.items() if jp in detail.get("description", "")), "")
     gi = game_info(model)
     if gi:
-        noun = {"camera": "Digital Camera", "md": "MiniDisc Player"}.get(gi.get("kind"), "Handheld Console")
+        noun = {"camera": "Digital Camera", "md": "MiniDisc Player", "cassette": "Cassette Player",
+                "cd": "Portable CD Player", "video": "Camcorder", "watch": "Watch"}.get(gi.get("kind"), "Handheld Console")
         title_en = re.sub(r"\s+", " ", f"{gi['series']} {noun} {color} Japan").strip()[:80]
     else:
         title_en = build_title(model, title_jp, carrier, unlocked, color)
@@ -2239,7 +2329,16 @@ def prepare_text(r, info, detail):
             + {"camera": "<p>Japanese domestic model digital camera. The menu language may be Japanese only, so please check before purchase. "
                          "Only the items shown in the photos are included (battery, charger, memory card and accessories are included only if pictured).</p>",
                "md": "<p>Japanese domestic model MiniDisc player. Only the items shown in the photos are included "
-                     "(battery, charger, remote, discs and accessories are included only if pictured).</p>"}.get(gi.get("kind"),
+                     "(battery, charger, remote, discs and accessories are included only if pictured).</p>",
+               "cassette": "<p>Japanese domestic model portable cassette player. This is a vintage item; the rubber belt and parts are "
+                           "original unless stated. Only the items shown in the photos are included "
+                           "(battery, remote, headphones and accessories are included only if pictured).</p>",
+               "cd": "<p>Japanese domestic model portable CD player. Only the items shown in the photos are included "
+                     "(battery, AC adapter, remote, headphones and accessories are included only if pictured).</p>",
+               "video": "<p>Japanese domestic model camcorder. The menu language may be Japanese only, so please check before purchase. "
+                        "Only the items shown in the photos are included (battery, charger, tapes/memory cards and accessories are included only if pictured).</p>",
+               "watch": "<p>Japanese domestic model wristwatch. Only the items shown in the photos are included "
+                        "(box, papers and extra links are included only if pictured). Water resistance is not guaranteed for a used watch.</p>"}.get(gi.get("kind"),
             "<p>Japanese handheld game console. Only the items shown in the photos are included "
             "(charger, memory card, games and accessories are included only if pictured).</p>")
             + (f"<h3>Notes from the original Japanese description (machine translated)</h3><p>{escape(desc_en).replace(chr(10), '<br>')}</p>" if desc_en else "")
@@ -2300,8 +2399,18 @@ def create_listing(r, info, detail, settings, token):
     gi = game_info(model)
     if gi:
         category_id = gi.get("ebay_cat", GAME_EBAY_CATEGORY)
+        kind = gi.get("kind")
         specifics = [("Brand", gi["brand"]), ("Model", model), ("Series", gi.get("ser_name", "Sony Cyber-shot")),
-                     ("Type", "Point & Shoot"), ("Color", color or "As Pictured")] if gi.get("kind") == "camera" else \
+                     ("Type", "Point & Shoot"), ("Color", color or "As Pictured")] if kind == "camera" else \
+            [("Brand", gi["brand"]), ("Model", gi.get("code", model)), ("Type", "Portable Cassette Player"),
+             ("Color", color or "As Pictured")] if kind == "cassette" else \
+            [("Brand", gi["brand"]), ("Model", gi.get("code", model)), ("Type", "Portable CD Player"),
+             ("Color", color or "As Pictured")] if kind == "cd" else \
+            [("Brand", gi["brand"]), ("Model", gi.get("code", model)), ("Type", "Camcorder"),
+             ("Color", color or "As Pictured")] if kind == "video" else \
+            [("Brand", gi["brand"]), ("Model", gi.get("code", model)), ("Type", "Wristwatch"), ("Department", "Men"),
+             ("Movement", gi.get("movement", "Quartz")), ("Display", gi.get("display", "Analog")),
+             ("Country of Origin", "Japan")] if kind == "watch" else \
             [("Brand", gi["brand"]), ("Model", model), ("Type", "Portable MiniDisc Player"),
              ("Color", color or "As Pictured")] if gi.get("kind") == "md" else [("Brand", gi["brand"]), ("Model", model), ("Platform", gi["platform"]),
                      ("Type", "Handheld System"), ("Region Code", "NTSC-J (Japan)"),
@@ -2377,7 +2486,8 @@ YAHOO_HEADERS = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Apple
                                 "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
                  "Accept": "application/json", "Referer": "https://paypayfleamarket.yahoo.co.jp/"}
 YAHOO_PHONE_CATEGORY = 38419   # 携帯電話本体
-YAHOO_OK_CATEGORIES = {38419, 37849, 37661, 37697, 37799, 37808, 38155, 19801, 49488}   # ＋コンパクトデジカメ・ポータブルMD   # 携帯電話・PSP・Vita・DS・GB・GBA・3DS の本体
+YAHOO_OK_CATEGORIES = {38419, 37849, 37661, 37697, 37799, 37808, 38155, 19801, 49488,
+                       49487, 49489, 49429, 1647, 1645}   # 2026/10/28 ＋CD・カセットプレーヤー・ビデオカメラ・腕時計   # ＋コンパクトデジカメ・ポータブルMD   # 携帯電話・PSP・Vita・DS・GB・GBA・3DS の本体
 
 
 def is_yahoo(url):
@@ -2554,7 +2664,7 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
         pass
     fx = usd_jpy(settings)
     fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(q) / 100 + duty_pct(settings) / 100
-    ship = float(settings.get("ship_jpy") or 3000)
+    ship = ship_for(settings, q)
     best = None
     for it in items:
         u = it["url"].split("?")[0]
@@ -2670,7 +2780,8 @@ def discover():
                 seen.add(u)
                 if any(w in it["title"] for w in exclude) or reserved_reason(it["title"]):
                     continue
-                q = kw if gi and gi.get("exact") else guess_query(it["title"])   # 機種別カテゴリならその機種
+                q = kw if gi and (gi.get("exact") or (gi.get("alias") and gi.get("kind") and match_game(it["title"], kw))) \
+                    else guess_query(it["title"])   # 機種別カテゴリならその機種。呼び名で分かる機種（2026/10/28追加分）もその機種
                 if not q:
                     continue
                 checked += 1
