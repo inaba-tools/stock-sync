@@ -2365,6 +2365,74 @@ URGENCY_HTML = ("<p><b>Only 1 available.</b> This is a one-of-a-kind used item a
                 "Once it sells, it will not be restocked, so please don't wait too long if you would like it!</p>")
 
 
+# 2026/10/29 ゲーム機・カメラなどの英語タイトルに、海外の人が検索する言葉を足す（80文字まで使う）
+# 正式名（略称で検索しない人向け）。実物を見ていないので Tested / Working などは入れない
+FULL_NAMES = {"Sony PSP": "PlayStation Portable", "Sony PSP Go": "PlayStation Portable",
+              "Sony PlayStation Vita": "PlayStation Vita"}
+# CCDセンサーの機種（「CCD」で探す人が多い）。わかっている機種だけ
+CCD_RE = re.compile(r"Cyber-shot DSC-(W\d|T\d)|FinePix|Lumix DMC-F|Exilim EX-|Ricoh R10|COOLPIX S[34]\d{3}")
+
+
+def game_title(gi, color):
+    """<シリーズ 型番> <正式名> <CCD> <商品の種類> <色> Japan（長すぎたら 色→正式名→CCD→Japan の順に削る）"""
+    kind = gi.get("kind")
+    full = FULL_NAMES.get(gi.get("platform"), "")
+    ccd = "CCD" if kind == "camera" and CCD_RE.search(gi["series"]) else ""
+    mv = gi.get("movement", "")
+    noun = {"camera": "Compact Digital Camera", "md": "Portable MiniDisc Player",
+            "cassette": "Portable Cassette Player", "cd": "Portable CD Player",
+            "video": "Camcorder Video Camera",
+            "watch": ("Automatic Watch" if mv == "Automatic" else
+                      "Solar Digital Watch" if "Solar" in mv else
+                      "Digital Watch" if gi.get("display") == "Digital" else "Watch")
+            }.get(kind, "Handheld Game Console")
+    parts = [gi["series"], full, ccd, noun, color, "Japan"]
+
+    def join(ps):
+        return re.sub(r"\s+", " ", " ".join(p for p in ps if p)).strip()
+    t = join(parts)
+    for drop in (color, full, ccd, "Japan"):
+        if len(t) <= 80:
+            break
+        if drop:
+            parts.remove(drop)
+            t = join(parts)
+    return t[:80]
+
+
+def retitle():
+    """出品中のゲーム機・カメラなどのタイトルを新しい形に書き換える（1回だけ実行。ウォッチはそのまま残る）"""
+    data = sheet("list")
+    rows = [r for r in data["rows"] if r["ebay_item_id"] and r["status"] in ("", "active")]
+    token = get_access_token()
+    ok_n = fail_n = skip_n = 0
+    updates = []
+    for r in rows:
+        title_jp = r.get("title") or ""
+        model = (r.get("query") or "").strip() or guess_query(title_jp) or ""
+        gi = game_info(model)
+        if not gi:
+            skip_n += 1   # ガラケーは今の形のまま
+            continue
+        color = next((en for jp, en in COLORS.items() if jp in title_jp), "")
+        new = game_title(gi, color)
+        ack, errs, root = trading_call_root(
+            "ReviseFixedPriceItem",
+            f"<Item><ItemID>{r['ebay_item_id']}</ItemID><Title>{escape(new)}</Title></Item>", token)
+        if ack in ("Success", "Warning"):
+            ok_n += 1
+            print("タイトル変更:", r["ebay_item_id"], new)
+        else:
+            fail_n += 1
+            print("タイトル変更に失敗:", r["row"], " / ".join(errs)[:200])
+            updates.append({"row": r["row"], "result": "タイトルの変更に失敗：" + " / ".join(errs)[:200]})
+    if updates:
+        sheet("update", updates=updates)
+    msg = f"{now()} タイトルの書き換え：変更 {ok_n}件／失敗 {fail_n}件／ガラケーなどそのまま {skip_n}件"
+    print(msg)
+    sheet("log", message=msg)
+
+
 def prepare_text(r, info, detail):
     """出品に使う英語タイトル・説明文など（新規出品と説明文の作り直しで共通）"""
     title_jp = info.get("title") or r.get("title", "")
@@ -2376,9 +2444,7 @@ def prepare_text(r, info, detail):
         next((en for jp, en in COLORS.items() if jp in detail.get("description", "")), "")
     gi = game_info(model)
     if gi:
-        noun = {"camera": "Digital Camera", "md": "MiniDisc Player", "cassette": "Cassette Player",
-                "cd": "Portable CD Player", "video": "Camcorder", "watch": "Watch"}.get(gi.get("kind"), "Handheld Console")
-        title_en = re.sub(r"\s+", " ", f"{gi['series']} {noun} {color} Japan").strip()[:80]
+        title_en = game_title(gi, color)
     else:
         title_en = build_title(model, title_jp, carrier, unlocked, color)
     tr = sheet("translate", texts=[detail.get("condition", ""), clean_desc(detail.get("description", ""))])["texts"]
@@ -3272,6 +3338,8 @@ if __name__ == "__main__":
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
         elif len(sys.argv) > 1 and sys.argv[1] == "thanks":
             thanks(sys.argv[2:])
+        elif len(sys.argv) > 1 and sys.argv[1] == "retitle":
+            retitle()
         elif len(sys.argv) > 1 and sys.argv[1] == "setsku":
             setsku()
         elif len(sys.argv) > 1 and sys.argv[1] == "excludejp":
