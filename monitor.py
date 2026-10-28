@@ -2337,9 +2337,15 @@ PHONE_CATEGORY = re.compile(r"携帯電話本体|スマートフォン本体|PHS
                             r"ポータブルCDプレーヤー|CDプレーヤー|カセットプレーヤー|ビデオカメラ|時計|デジタルカメラ")
 
 
+ONLY_PHONE_CATEGORY = re.compile(r"携帯電話本体|スマートフォン本体|PHS本体|携帯電話|ガラケー")
+
+
 def not_a_phone(r, title_jp, detail):
     """仕入れ先の商品が携帯電話本体でなさそうなら理由を返す（CDの品番を型番と間違えた、など）"""
     cat = detail.get("category", "")
+    if cat and not game_info((r.get("query") or "").strip()) and not ONLY_PHONE_CATEGORY.search(cat):
+        # 2026/10/28 知らない型番（例：富士フイルム S8100fd）をガラケーとして出品しないよう、携帯電話のカテゴリだけ認める
+        return f"携帯電話本体ではない商品です（カテゴリ：{cat[:40]}）"
     if cat and not PHONE_CATEGORY.search(cat):
         return f"携帯電話本体ではない商品です（カテゴリ：{cat[:40]}）"
     if cat:
@@ -2426,6 +2432,8 @@ def create_listing(r, info, detail, settings, token):
         return None, "「設定」シートに配送ポリシー名が入っていません"
     if float(cost) > max_cost(settings):
         return None, f"SKIP:仕入れ値{int(cost):,}円が上限{int(max_cost(settings)):,}円を超えるため出品しません"
+    if float(cost) < 500:
+        return None, f"SKIP:仕入れ値{int(cost):,}円は読み取りミスか本体以外の可能性があるため出品しません"
     bad = not_a_phone(r, title_jp, detail) or no_body_reason(title_jp + "\n" + detail.get("description", "")) \
         or junk_reason(title_jp + "\n" + detail.get("description", ""))
     if not bad and game_info((r.get("query") or "").strip()):
@@ -2834,7 +2842,7 @@ def discover():
                     continue
                 q = kw if gi and (gi.get("exact") or (gi.get("alias") and gi.get("kind") and match_game(it["title"], kw))) \
                     else guess_query(it["title"])   # 機種別カテゴリならその機種。呼び名で分かる機種（2026/10/28追加分）もその機種
-                if not q:
+                if not q or (gi and not game_info(q)):   # カメラなどのカテゴリで見つけた知らない型番は候補にしない（2026/10/28）
                     continue
                 checked += 1
                 sale, n = ebay_market_usd(q)
@@ -2869,7 +2877,7 @@ def discover():
                     q = kw if match_game(it["title"], kw) else ""   # 呼び名で機種を見分ける
                 else:
                     q = guess_query(it["title"])
-                if not q:
+                if not q or (gi and not game_info(q)):
                     continue
                 checked += 1
                 sale, n = ebay_market_usd(q)
