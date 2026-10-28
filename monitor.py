@@ -601,6 +601,16 @@ GAMES = {
     "WSC-001": {"brand": "Bandai", "platform": "Bandai WonderSwan Color", "series": "Bandai WonderSwan Color WSC-001",
                 "mercari": "7197", "exact": True, "yahoo_q": "ワンダースワンカラー", "ebay_q": "Bandai WonderSwan Color",
                 "alias": r"スワン\s*カラー|SWAN\s*COLOU?R|WSC", "neg": r"クリスタル|CRYSTAL|SC-001"},
+    # 2026/10/28 追加（eBayで過去90日に売れた台数を確認済み）
+    "MGB-101": {"brand": "Nintendo", "platform": "Nintendo Game Boy Light", "series": "Nintendo Game Boy Light MGB-101",
+                "mercari": "7181", "exact": True, "yahoo_q": "ゲームボーイライト", "ebay_q": "Game Boy Light",
+                "alias": r"ゲームボーイ\s*ライト|GAME ?BOY ?LIGHT|MGB-?101", "neg": r"ポケット|カラー|アドバンス|POCKET|COLOR|ADVANCE"},
+    "SCT-001": {"brand": "Bandai", "platform": "Bandai WonderSwan", "series": "Bandai SwanCrystal SCT-001",
+                "mercari": "7197", "exact": True, "yahoo_q": "スワンクリスタル", "ebay_q": "Bandai SwanCrystal",
+                "alias": r"スワン\s*クリスタル|SWAN\s*CRYSTAL|SCT-?001", "neg": r"$^"},
+    "PI-TG6": {"brand": "NEC", "platform": "NEC PC Engine", "series": "NEC PC Engine GT PI-TG6",
+               "mercari": "7231", "exact": True, "yahoo_q": "PCエンジンGT", "ebay_q": "PC Engine GT",
+               "alias": r"PC\s*エンジン\s*GT|PC\s*ENGINE\s*GT|TURBO\s*EXPRESS|PI-?TG6", "neg": r"$^"},
     "NEOP-10": {"brand": "SNK", "platform": "SNK Neo Geo Pocket Color", "series": "SNK Neo Geo Pocket Color",
                 "mercari": "7228", "exact": True, "yahoo_q": "ネオジオポケットカラー", "ebay_q": "Neo Geo Pocket Color",
                 "alias": r"ネオジオ\s*ポケット\s*カラー|NEO\s*-?\s*GEO\s*POCKET\s*COLOU?R|NGPC", "neg": r"$^"},
@@ -652,6 +662,11 @@ OTHER_CAMERAS = {
     "S6500": ("Nikon", "Nikon Coolpix", "Nikon COOLPIX S6500"), "S6800": ("Nikon", "Nikon Coolpix", "Nikon COOLPIX S6800"),
     **{_k: ("Nikon", "Nikon Coolpix", f"Nikon COOLPIX {_k}") for _k in
        ("S4100", "S6100", "S3600", "S9700", "S8100", "S6000", "S9100", "S3700", "S9600", "S8000", "S6600", "S5200")},
+    # 2026/10/28 追加（eBayで過去90日に売れた台数を確認済み）
+    **{f"IXY-{_k}": ("Canon", "Canon PowerShot", f"Canon IXY {_k}") for _k in
+       ("200", "630", "600F", "610F", "190", "150", "420F", "640", "210", "160")},
+    "SX620": ("Canon", "Canon PowerShot", "Canon PowerShot SX620 HS"),
+    "SX720": ("Canon", "Canon PowerShot", "Canon PowerShot SX720 HS"),
 }
 for _m, (_b, _s, _n) in OTHER_CAMERAS.items():
     GAMES[_m] = {"kind": "camera", "brand": _b, "platform": _s, "series": _n, "ser_name": _s,
@@ -826,6 +841,9 @@ SOLD90 = {"902KC": 41, "KY-42C": 23, "601SH": 20, "A202KC": 18, "P-01G": 18, "90
           "PCH-1000": 80, "PCH-2000": 77, "PSP-3000": 73, "PSP-1000": 41, "RED-001": 34, "USG-001": 22,
           "CTR-001": 17, "CGB-001": 15, **CAMERA_MODELS, **MD_MODELS,
           **{k: 40 for k in OTHER_CAMERAS}, "IXY-180": 120, "UTL-001": 80, "WSC-001": 25, "NEOP-10": 36,
+          "IXY-200": 54, "IXY-630": 39, "IXY-600F": 29, "IXY-610F": 25, "IXY-190": 26, "IXY-150": 22, "IXY-420F": 21,
+          "IXY-640": 13, "IXY-210": 12, "IXY-160": 11, "SX620": 80, "SX720": 80, "MGB-101": 51, "SCT-001": 36,
+          "PI-TG6": 26, "806SH": 9,   # 2026/10/28 追加（SX620・SX720は海外の売り手も多いので控えめに80）
           "KTR-001": 97, "JAN-001": 163, "PSP-N1000": 67, "S4100": 170, "S6100": 169, "S3600": 147, "S9700": 141,
           "S8100": 135, "S6000": 134, "S9100": 134, "S3700": 106, "S9600": 75, "S8000": 67, "S6600": 64, "S5200": 62,
           "S3500": 190, "S4300": 123, "S6500": 114, "S6800": 91}
