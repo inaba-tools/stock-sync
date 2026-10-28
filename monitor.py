@@ -724,8 +724,10 @@ CAMERA_BRANDS = {
 NEW_GENRES = {
     "camera": {"mercari": "4007", "ebay_cat": "31388", "yahoo": 19801},
     "cassette": {"mercari": "3952", "ebay_cat": "15053", "yahoo": 49489},
-    "cd": {"mercari": "3950", "ebay_cat": "15054", "yahoo": 49487},
-    "video": {"mercari": "4012", "ebay_cat": "11724", "yahoo": 49429, "ship": 5000},
+    # CD：直径14cmで今の箱（22×13×6cm）に入らない。20×20×6cmなら0.5kgの料金だが、箱次第で上がるので余裕を見る
+    "cd": {"mercari": "3950", "ebay_cat": "15054", "yahoo": 49487, "ship": 4000},
+    # ビデオカメラ：25×18×10cmほどの箱で1kgの料金（東海岸あてで約5,600円）
+    "video": {"mercari": "4012", "ebay_cat": "11724", "yahoo": 49429, "ship": 5600},
     "watch": {"mercari": "39", "ebay_cat": "31387", "yahoo": 1647},
 }
 
