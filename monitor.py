@@ -1940,38 +1940,57 @@ def small_picture_bytes(u):
         return None
 
 
+# 2026/10/28 eBayが写真の取り込み（Trading API の UploadSiteHostedPictures）を終了し、404 を返すようになったため
+# Media API（createImageFromUrl / createImageFromFile）に切り替えた。トークンは今までと同じ（sell.inventory の権限で使える）
+MEDIA_URL = "https://apim.ebay.com/commerce/media/v1_beta/image"
+
+
+def _media_image_url(r, token):
+    """Media API の返事から eBay の写真URLを取り出す（本文になければ Location の写真情報を取りに行く）"""
+    if r.status_code not in (200, 201):
+        body = re.sub(r"\s+", " ", (r.text or "")[:200]).strip()
+        raise RuntimeError(f"写真の取り込みに失敗（Media API HTTP {r.status_code}：{body or '中身なし'}）")
+    try:
+        url = (r.json() or {}).get("imageUrl", "")
+    except ValueError:
+        url = ""
+    if not url and r.headers.get("Location"):
+        g = requests.get(r.headers["Location"], headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        if g.status_code == 200:
+            url = (g.json() or {}).get("imageUrl", "")
+    return url
+
+
 def upload_picture_bytes(data, token):
     """画像データをそのままeBayに送る（小さい写真を拡大したときに使う）"""
-    boundary = "GTRBOUNDARY" + str(random.randint(10 ** 8, 10 ** 9))
-    xml = ('<?xml version="1.0" encoding="utf-8"?>'
-           '<UploadSiteHostedPicturesRequest xmlns="urn:ebay:apis:eBLBaseComponents">'
-           '<PictureName>gtr</PictureName><PictureSet>Supersize</PictureSet></UploadSiteHostedPicturesRequest>')
-    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"XML Payload\"\r\n"
-            f"Content-Type: text/xml;charset=utf-8\r\n\r\n{xml}\r\n"
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n"
-            "Content-Type: image/jpeg\r\nContent-Transfer-Encoding: binary\r\n\r\n").encode("utf-8") \
-        + data + f"\r\n--{boundary}--\r\n".encode("utf-8")
-    r = requests.post(TRADING_URL, headers={
-        "X-EBAY-API-CALL-NAME": "UploadSiteHostedPictures", "X-EBAY-API-SITEID": "0",
-        "X-EBAY-API-COMPATIBILITY-LEVEL": "1209", "X-EBAY-API-IAF-TOKEN": token,
-        "Content-Type": f"multipart/form-data; boundary={boundary}"}, data=body, timeout=60)
-    root = ebay_xml(r, "UploadSiteHostedPictures")
-    return root.findtext("e:SiteHostedPictureDetails/e:FullURL", default="", namespaces=NS)
+    r = requests.post(f"{MEDIA_URL}/create_image_from_file",
+                      headers={"Authorization": f"Bearer {token}"},
+                      files={"image": ("image.jpg", data, "image/jpeg")}, timeout=60)
+    return _media_image_url(r, token)
+
+
+def upload_picture_url(u, token):
+    """写真のURLを渡して、eBayに取り込んでもらう"""
+    r = requests.post(f"{MEDIA_URL}/create_image_from_url",
+                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                      json={"imageUrl": u}, timeout=60)
+    return _media_image_url(r, token)
 
 
 def upload_pictures(urls, token):
-    out = []
+    out, last_err = [], ""
     for u in urls:
-        small = small_picture_bytes(u)
-        if small:
-            full = upload_picture_bytes(small, token)   # 小さい写真は拡大してから送る
-        else:
-            ack, errors, root = trading_call_root(
-                "UploadSiteHostedPictures",
-                f"<ExternalPictureURL>{escape(u)}</ExternalPictureURL><PictureSet>Supersize</PictureSet>", token)
-            full = root.findtext("e:SiteHostedPictureDetails/e:FullURL", default="", namespaces=NS)
+        try:
+            small = small_picture_bytes(u)
+            full = upload_picture_bytes(small, token) if small else upload_picture_url(u, token)   # 小さい写真は拡大してから送る
+        except Exception as e:
+            last_err = str(e)[:200]
+            print("写真の取り込みに失敗:", last_err)
+            full = ""
         if full:
             out.append(full)
+    if not out and last_err:
+        raise RuntimeError(last_err)   # 1枚も取り込めなかったときは理由を結果欄に出す
     return out
 
 
@@ -2194,7 +2213,7 @@ def ebay_cancelled_items(token, days=30):
 
 
 # eBayが一時的に受け付けないときのエラー（回数の上限・障害）。「出品できず」で止めずに次の回にやり直す
-TEMP_EBAY_ERR = re.compile(r"応答が読めません|HTTP (429|5\d\d)|call limit|usage limit|exceeded|Too Many|temporarily|try again", re.I)
+TEMP_EBAY_ERR = re.compile(r"応答が読めません|HTTP (429|5\d\d)|Media API HTTP (429|5\d\d)|call limit|usage limit|exceeded|Too Many|temporarily|try again", re.I)
 
 
 def ebay_xml(r, call_name=""):
