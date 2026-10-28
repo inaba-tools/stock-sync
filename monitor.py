@@ -314,7 +314,7 @@ def trading_call(call_name, body_xml, token):
         data=xml.encode("utf-8"),
         timeout=30,
     )
-    root = ET.fromstring(r.content)
+    root = ebay_xml(r, call_name)
     ack = root.findtext("e:Ack", default="", namespaces=NS)
     errors = [e.findtext("e:LongMessage", default="", namespaces=NS) for e in root.findall("e:Errors", NS)]
     return ack, errors
@@ -1221,6 +1221,7 @@ def _main():
         quota_hit = False   # eBayの出品枠の上限に達したら、入れ替えできるときだけ出品する
         free_used = None    # 今月使う無料出品枠（出品するときに初めて数える）
         free_full = False
+        ebay_busy = False   # 2026/10/28 eBayが一時的に受け付けない（回数の上限など）→ この回は出品をやめて次の回へ
         day_full = False    # 今日の出品ペースの上限に達した
         unknown_twice = []  # 2回続けてメルカリの状態を判定できなかった出品（売り切れに気づけないおそれ）
         offer_targets = {}  # ウォッチされている出品 {出品番号: (今の値段, 利益2,000円の値段)}：値引きオファーを送る
@@ -1424,6 +1425,8 @@ def _main():
                         and not swap_out(model_key(r.get("query")), expected_profit(info.get("price"), r.get("query"), settings)):
                     upd["result"] = f"同じ機種がすでに{cap_for(r.get('query'))}件出品中のため候補から外しました"
                     upd["status"] = "stopped"
+                elif status == "on_sale" and info and ebay_busy:
+                    upd["result"] = "【待機】eBayが一時的に受け付けないため、次の回に出品します"
                 elif status == "on_sale" and info and free_full:
                     upd["result"] = f"【待機】今月の無料出品枠（{FREE_LISTINGS}件）を使い切ったため、来月1日まで出品を待ちます"
                 elif status == "on_sale" and info and day_full:
@@ -1460,6 +1463,8 @@ def _main():
                             res, err = create_listing(r, info, detail, settings, token)
                     except Exception as e:
                         res, err = None, f"出品中にエラー：{str(e)[:200]}"
+                        if TEMP_EBAY_ERR.search(str(e)):
+                            ebay_busy = True   # eBayが一時的に受け付けない → この回はもう出品しない（次の回にやり直す）
                     if free_full:
                         res, err = None, "WAIT"
                     elif day_full:
@@ -1478,6 +1483,8 @@ def _main():
                         notify(f"【出品】{res['title_en']} ${res['price']:.2f}（eBay {res['ebay_item_id']}）")
                     elif err == "WAIT":
                         upd["result"] = f"【待機】今月の無料出品枠（{FREE_LISTINGS}件）を使い切ったため、来月1日まで出品を待ちます"
+                    elif err and TEMP_EBAY_ERR.search(err):
+                        upd["result"] = f"【待機】eBayが一時的に受け付けないため、次の回に出品します（{err[7:120]}）"
                     elif err == "LIMITWAIT":
                         upd["result"] = "【待機】eBayの相場の問い合わせ上限に達したため、次の回に出品します"
                     elif err == "DAYWAIT":
@@ -1948,7 +1955,7 @@ def upload_picture_bytes(data, token):
         "X-EBAY-API-CALL-NAME": "UploadSiteHostedPictures", "X-EBAY-API-SITEID": "0",
         "X-EBAY-API-COMPATIBILITY-LEVEL": "1209", "X-EBAY-API-IAF-TOKEN": token,
         "Content-Type": f"multipart/form-data; boundary={boundary}"}, data=body, timeout=60)
-    root = ET.fromstring(r.content)
+    root = ebay_xml(r, "UploadSiteHostedPictures")
     return root.findtext("e:SiteHostedPictureDetails/e:FullURL", default="", namespaces=NS)
 
 
@@ -2186,6 +2193,22 @@ def ebay_cancelled_items(token, days=30):
             for li in o.get("lineItems", [])} - {""}
 
 
+# eBayが一時的に受け付けないときのエラー（回数の上限・障害）。「出品できず」で止めずに次の回にやり直す
+TEMP_EBAY_ERR = re.compile(r"応答が読めません|HTTP (429|5\d\d)|call limit|usage limit|exceeded|Too Many|temporarily|try again", re.I)
+
+
+def ebay_xml(r, call_name=""):
+    """eBay(Trading API)の返事をXMLとして読む。読めないとき（回数の上限・一時的な障害など）は、
+    返ってきた番号と中身の先頭を書いたエラーにする（2026/10/28：以前は「syntax error」としか分からなかった）"""
+    try:
+        return ET.fromstring(r.content)
+    except ET.ParseError:
+        body = re.sub(r"\s+", " ", (r.text or "")[:200]).strip()
+        msg = f"eBayの応答が読めません（{call_name} HTTP {r.status_code}：{body or '中身なし'}）"
+        print(msg)
+        raise RuntimeError(msg)
+
+
 def trading_call_root(call_name, body_xml, token):
     xml = ('<?xml version="1.0" encoding="utf-8"?>'
            f'<{call_name}Request xmlns="urn:ebay:apis:eBLBaseComponents">{body_xml}</{call_name}Request>')
@@ -2193,7 +2216,7 @@ def trading_call_root(call_name, body_xml, token):
         "X-EBAY-API-CALL-NAME": call_name, "X-EBAY-API-SITEID": "0",
         "X-EBAY-API-COMPATIBILITY-LEVEL": "1209", "X-EBAY-API-IAF-TOKEN": token,
         "Content-Type": "text/xml"}, data=xml.encode("utf-8"), timeout=60)
-    root = ET.fromstring(r.content)
+    root = ebay_xml(r, call_name)
     ack = root.findtext("e:Ack", default="", namespaces=NS)
     errors = [e.findtext("e:LongMessage", default="", namespaces=NS)
               for e in root.findall("e:Errors", NS) if e.findtext("e:SeverityCode", namespaces=NS) == "Error"]
