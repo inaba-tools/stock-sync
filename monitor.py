@@ -813,9 +813,9 @@ def game_reject_reason(title, model, price_jpy=None, sale_usd=None, settings=Non
 GAME_EBAY_CATEGORY = "139971"
 # ゲームボーイ系は古くて仕入れが高く数も少ないので、利益が大きく取れるときだけ扱う
 GAMEBOY_MODELS = {"DMG-01", "MGB-001", "CGB-001", "AGB-001", "AGS-001", "OXY-001"}
-GAMEBOY_MIN_PROFIT = 2000   # 2026/10/26 ほかの商品と同じ2,000円にそろえた（以前は10,000円）
+GAMEBOY_MIN_PROFIT = 0   # 2026/10/28 設定シートの最低利益（B14）にそろえる。 2026/10/26 ほかの商品と同じ2,000円にそろえた（以前は10,000円）
 RETRO_MODELS = {"WSC-001", "NEOP-10"}   # 古いゲーム機：液晶の不具合・返品が多いので利益が大きいときだけ
-RETRO_MIN_PROFIT = 2000   # 2026/10/26 ほかの商品と同じ2,000円にそろえた（以前は4,000円）
+RETRO_MIN_PROFIT = 0   # 2026/10/28 設定シートの最低利益（B14）にそろえる。 2026/10/26 ほかの商品と同じ2,000円にそろえた（以前は4,000円）
 
 # 出品枠（月350件・2万ドル）を有効に使うためのルール
 MAX_PER_MODEL = 3   # 同じ機種の出品は3件まで（仕入れが安い＝利益が大きいものを残す）
@@ -860,8 +860,21 @@ def max_cost(settings):
         return MAX_COST_DEFAULT
 
 
+MIN_PROFIT_NOW = [PRICE_FLOOR_PROFIT]   # 今の最低利益（設定シートB14を読んだら置きかわる）
+
+
+def use_min_profit(settings):
+    """設定シートB14の最低利益を、出品・値下げの値段にも使う"""
+    try:
+        v = float(settings.get("min_profit") or 0)
+        if v > 0:
+            MIN_PROFIT_NOW[0] = v
+    except (TypeError, ValueError):
+        pass
+
+
 def min_profit_for(cost, settings, model=""):
-    base = max(float(settings.get("min_profit") or 2000), float(cost or 0) * PROFIT_RATIO)
+    base = max(float(settings.get("min_profit") or PRICE_FLOOR_PROFIT), float(cost or 0) * PROFIT_RATIO)
     if (model or "").strip().upper() in GAMEBOY_MODELS:
         base = max(base, GAMEBOY_MIN_PROFIT)
     elif (model or "").strip().upper() in RETRO_MODELS:
@@ -1019,6 +1032,7 @@ def main():
 def _main():
     data = sheet("list")
     rows, settings = data["rows"], data.get("settings", {})
+    use_min_profit(settings)
     excluded = excluded_sellers(data)   # 「除外者リスト」シートの出品者（この人の商品は候補にも出品にもしない）
     KNOWN_MODELS[:] = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "")) if k.strip()]
     targets = [r for r in rows if r["status"] in ("", "active")]
@@ -1383,7 +1397,7 @@ def _main():
                         upd.update(research_row(r, info, settings))
                         researched += 1
                         # 利益が少ない・相場の件数が少ないものは候補から外す
-                        min_profit = float(settings.get("min_profit") or 2000)
+                        min_profit = float(settings.get("min_profit") or PRICE_FLOOR_PROFIT)
                         low_profit = "profit" in upd and upd["profit"] <= min_profit
                         few = upd.get("ebay_count") not in (None, "") and int(upd["ebay_count"]) < MIN_COUNT
                         if low_profit or few:
@@ -1675,7 +1689,7 @@ def build_title(model, title, carrier, unlocked, color):
     return t[:80]
 
 
-PRICE_FLOOR_PROFIT = 2000   # 出品価格はこの利益（円）が残る値段より下げない
+PRICE_FLOOR_PROFIT = 1500   # 出品価格はこの利益（円）が残る値段より下げない（2026/10/28 2,000円→1,500円。設定シートB14で上書き）
 NEW_LISTING_DAYS = 3        # 出品から3日間は相場の値段で様子を見る
 WATCH_STEP_USD = 2.0        # ウォッチされている商品は $2（約300円）ずつ値下げ（2026/10/22 $0.5→$2）
 WATCH_INTERVAL_H = 3        # 値下げの間隔（時間）（2026/10/22 1時間→3時間）
@@ -1686,7 +1700,7 @@ def floor_price_usd(cost, query, settings, profit=None):
     fx = usd_jpy(settings)
     fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
     ship = float(settings.get("ship_jpy") or 3000)
-    min_profit = PRICE_FLOOR_PROFIT if profit is None else profit
+    min_profit = MIN_PROFIT_NOW[0] if profit is None else profit
     return math.ceil((cost + ship + min_profit) / max(0.05, 1 - fee) / fx) - 0.01
 
 
@@ -2534,6 +2548,7 @@ def discover():
         print("トークンの期限の確認に失敗:", str(e)[:100])
     data = sheet("list")
     settings = data.get("settings", {})
+    use_min_profit(settings)
     known = {r["mercari_url"].split("?")[0] for r in data["rows"]}
     # 一度候補から外して「履歴」に移した商品も飛ばす（2026/10/28：同じジャンク品が毎回拾われ、追加の枠を取っていたため）
     known |= {str(u).split("?")[0] for u in (data.get("seen_urls") or []) if u}
