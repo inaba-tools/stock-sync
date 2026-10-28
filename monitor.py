@@ -1690,6 +1690,9 @@ def sync_sales(token, settings):
         done = []
         for o in orders:
             if o["item_id"] in (res.get("thank_ids") or []) and o.get("buyer"):
+                at = DELIVERED_AT.get(o["order_id"])
+                if at and datetime.now(JST) - at < timedelta(hours=THANKS_DELAY_H):
+                    continue   # 届いてから24時間たっていない → 次の回以降に送る
                 if send_delivered_thanks(o, token):
                     done.append(o["item_id"])
         if done:
@@ -2100,7 +2103,12 @@ def delivered_dates(order_ids, token):
             if oid and times:
                 d = datetime.fromisoformat(max(times).replace("Z", "+00:00")).astimezone(JST)
                 out[oid] = d.strftime("%Y-%m-%d")
+                DELIVERED_AT[oid] = d
     return out
+
+
+DELIVERED_AT = {}          # 注文番号 → 配達された日時（日本時間）
+THANKS_DELAY_H = 24        # 2026/10/28 届いてすぐではなく、相手が開けて確かめたころ（24時間後）にお礼を送る
 
 
 def send_delivered_thanks(o, token):
