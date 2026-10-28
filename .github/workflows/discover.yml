@@ -43,8 +43,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache
-          key: market-${{ github.run_id }}-${{ matrix.shard }}
-          restore-keys: market-
+          key: market-s${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: market-s${{ matrix.shard }}-   # 4本それぞれ自分の受け持ちの相場を使い回す（問い合わせ回数を減らす）
       - name: 候補をさがす
         run: python monitor.py discover
         env:

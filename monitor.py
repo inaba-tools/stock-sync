@@ -483,20 +483,44 @@ def guess_query(title):
 _market_cache = {}
 
 
+def normalize_query(query):
+    """型番のゆれ（PCH-2000ZA → PCH-2000 など）を、設定シートの検索キーワードにそろえる（eBayへの問い合わせ回数を減らす）"""
+    k = re.sub(r"[-\s]", "", (query or "").upper())
+    best = None
+    for kw in KNOWN_MODELS:
+        kk = re.sub(r"[-\s]", "", kw.upper())
+        if kk and k.startswith(kk) and (best is None or len(kk) > len(re.sub(r"[-\s]", "", best.upper()))):
+            best = kw
+    return best or query
+
+
+EBAY_LIMITED = [False]   # eBayの1日の問い合わせ上限（429）に当たったら、その回はもう問い合わせない
+
+
 def ebay_market_usd(query):
     """eBay(US)で同じ型番の中古・即決出品の価格(送料込み)の中央値と件数（携帯電話カテゴリ）"""
+    query = normalize_query(query)
     if query in _market_cache:
         _market_stats["hit"] += 1
         return _market_cache[query]
+    if EBAY_LIMITED[0]:
+        return None, 0
     _market_stats["miss"] += 1
-    _market_cache[query] = _ebay_market_usd(query)
+    try:
+        _market_cache[query] = _ebay_market_usd(query)
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 429:
+            EBAY_LIMITED[0] = True
+            print("eBayの1日の問い合わせ上限に達したので、この回は保存してある相場だけで続けます")
+            return None, 0
+        raise
     _market_time[query] = time.time()
     return _market_cache[query]
 
 
 # ---- 候補さがし用：eBay相場を6時間ファイルに覚えておく（出品の直前には必ず最新の相場を取り直す） ----
 MARKET_FILE = os.path.join(".cache", "market.json")
-MARKET_TTL = 6 * 3600
+MARKET_TTL = 24 * 3600   # 2026/10/28 6時間→24時間（eBayの1日の問い合わせ上限に当たったため）
 _market_time = {}
 _market_stats = {"hit": 0, "miss": 0}
 
@@ -510,7 +534,7 @@ def load_market_cache():
             if t >= cut:
                 _market_cache[q] = tuple(v)
                 _market_time[q] = t
-        print(f"保存してあった相場：{len(_market_cache)}件（6時間以内）")
+        print(f"保存してあった相場：{len(_market_cache)}件（24時間以内）")
     except FileNotFoundError:
         print("保存してあった相場：なし")
     except Exception as e:
@@ -522,7 +546,7 @@ def save_market_cache():
         os.makedirs(os.path.dirname(MARKET_FILE), exist_ok=True)
         with open(MARKET_FILE, "w", encoding="utf-8") as f:
             json.dump({q: [_market_time[q], list(v)] for q, v in _market_cache.items()
-                       if q in _market_time and v and v[0]}, f, ensure_ascii=False)
+                       if q in _market_time and v}, f, ensure_ascii=False)   # 相場が見つからなかった型番も覚えておく（毎回問い合わせない）
     except Exception as e:
         print("相場を保存できませんでした:", str(e)[:100])
 
@@ -3058,7 +3082,8 @@ if __name__ == "__main__":
     except Exception as e:
         # 通信が一瞬つながらなかっただけのエラーは「失敗」にしない（失敗メールが届かないように）。次の回で自然にやり直される
         if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)) or type(e).__name__ == "TimeoutError" \
-                or (isinstance(e, RuntimeError) and re.search(r"応答が読めません|\(5\d\d\)|timed out|タイムアウト|too many times|Lock|ロック", str(e))):
+                or (isinstance(e, RuntimeError) and re.search(r"応答が読めません|\(5\d\d\)|timed out|タイムアウト|too many times|Lock|ロック", str(e))) \
+                or "429" in str(e)[:40]:
             print("通信が一時的につながりませんでした。次の回でやり直します:", type(e).__name__)
             try:
                 sheet("log", message=f"{now()} 通信エラー（一時的・次の回でやり直し）：{type(e).__name__} {str(e)[:120]}")
