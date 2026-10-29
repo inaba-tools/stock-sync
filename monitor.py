@@ -3182,7 +3182,10 @@ def fixdesc(end_bad=True):
                 t = prepare_text(r, info, detail)
                 ack, errs, root = trading_call_root(
                     "ReviseFixedPriceItem",
-                    f"<Item><ItemID>{r['ebay_item_id']}</ItemID><Description><![CDATA[{t['desc_html']}]]></Description></Item>",
+                    f"<Item><ItemID>{r['ebay_item_id']}</ItemID><Description><![CDATA[{t['desc_html']}]]></Description>"
+                    + ("" if "新品" in detail.get("condition", "")
+                       else f"<ConditionDescription>{escape(t['cond_en'][:900])}</ConditionDescription>")
+                    + "</Item>",
                     token)
                 if ack in ("Success", "Warning"):
                     fixed += 1

@@ -32,8 +32,8 @@ jobs:
 
       - run: python -m playwright install --with-deps chromium
 
-      - name: ゲーム機・カメラなどのタイトルを検索されやすい形に書き換え（2026/10/29）
-        run: python monitor.py retitle
+      - name: 状態の英語（Damaged and stained などの誤訳）と説明文を作り直す（2026/10/29）
+        run: python monitor.py redesc
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
