@@ -854,7 +854,10 @@ JUNK_RE = re.compile(
 DEFECT_RE = re.compile(
     r"(誤作動|誤動作|不具合|不良|故障|モヤ|ムラ|シミ|ドット抜け|画面焼け|液晶焼け|焼き付き|反応しない|反応が悪い|"
     r"効かない|作動しない|動かない|映らない|写らない|ピントが合わない|切り替わらない|充電できない|"
-    r"エラーが出|エラー表示|ノイズが|音が出ない|音飛び|黒点|黒い点|黄ばみ|勝手に|[JＪ]グレード|[JＪ]ランク)"
+    r"エラーが出|エラー表示|ノイズが|音が出ない|音飛び|黒点|黒い点|黄ばみ|勝手に|[JＪ]グレード|[JＪ]ランク|"
+    # 2026/10/29 液晶の影・斑模様など（「画面に影響」は除く）
+    r"(液晶|画面|モニター|ディスプレイ)[^。\n]{0,12}?(影(?!響)|斑|まだら|にじみ|滲み|縦線|横線|線が入|線が出|線あり)|"
+    r"斑模様|まだら模様|白斑|白いシミ|液晶漏れ|液漏れ)"
     r"(?![^。\n、]{0,5}?(なし|無し|ナシ|ない|なく|無く|ありません|ございません|見当たりません|見られません|確認されません))")
 
 
@@ -2433,6 +2436,27 @@ def retitle():
     sheet("log", message=msg)
 
 
+# 2026/10/29 フリマの「商品の状態」は決まった英語にする（機械翻訳だと「傷や汚れあり」が
+# 「Damaged and stained（壊れていてしみがある）」になり、買い手が不安になるため）
+CONDITION_EN = [
+    ("未使用に近い", "Like new - used only briefly, no visible scratches or marks."),
+    ("目立った傷や汚れなし", "Good - no noticeable scratches or marks."),
+    ("やや傷や汚れあり", "Fair - some light scratches or marks from normal use."),
+    ("全体的に状態が悪い", "Poor - heavy signs of use overall. Please check the photos."),
+    ("傷や汚れあり", "Used - visible scratches or marks on the body. Please check the photos."),
+    ("新品", "New / unused."),
+    ("未使用", "New / unused."),
+]
+
+
+def condition_en(cond_jp, translated=""):
+    c = unicodedata.normalize("NFKC", cond_jp or "")
+    for jp, en in CONDITION_EN:
+        if jp in c:
+            return en
+    return translated
+
+
 def prepare_text(r, info, detail):
     """出品に使う英語タイトル・説明文など（新規出品と説明文の作り直しで共通）"""
     title_jp = info.get("title") or r.get("title", "")
@@ -2448,7 +2472,7 @@ def prepare_text(r, info, detail):
     else:
         title_en = build_title(model, title_jp, carrier, unlocked, color)
     tr = sheet("translate", texts=[detail.get("condition", ""), clean_desc(detail.get("description", ""))])["texts"]
-    cond_en, desc_en = tr[0], clean_desc(tr[1])
+    cond_en, desc_en = condition_en(detail.get("condition", ""), tr[0]), clean_desc(tr[1])
     if gi:
         desc_html = (
             f"<h2>{escape(title_en)}</h2>"
