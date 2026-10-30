@@ -2171,9 +2171,12 @@ FEEDBACK_ASK_ENABLED = False   # 試し実行（feedbackcheck）で確かめて�
 FEEDBACK_ASK_DAYS = 7          # 届いてから何日たったら送るか
 FEEDBACK_ASK_MAX_DAYS = 30     # これより前に届いたものには送らない
 FEEDBACK_ASK_SUBJECT = "A small favor"
-FEEDBACK_ASK_MSG = ("Hi, I hope you are enjoying your item. "
-                    "If you have a moment, I would be very grateful if you could leave feedback. "
-                    "As a new seller, it helps me a lot. Thank you again for your purchase!")
+FEEDBACK_ASK_MSG = ("Hi! If you're happy with your item, I'd really appreciate it if you could leave feedback. "
+                    "Thank you!")
+# 送信済みフォルダでは件名が「〇〇 has sent a question about item #…」に置き換わるため、件名ではなく通数で数える。
+# この出品で送った通数が、購入時のお礼＋届いたお礼の2通までなら未送信（3通以上なら送らない＝安全側）
+SENT_MARK = "has sent a question about item"
+FEEDBACK_ASK_BEFORE = 2
 
 
 def feedback_received_items(token):
@@ -2229,18 +2232,22 @@ def ask_feedback(orders, token, thanked_ids, dry_run=False):
         age = now_ - at
         if timedelta(days=FEEDBACK_ASK_DAYS) <= age <= timedelta(days=FEEDBACK_ASK_MAX_DAYS):
             due.append(o)
-    if not due and not dry_run:
+    if dry_run:
+        due = [o for o in orders if DELIVERED_AT.get(o.get("order_id")) and o.get("buyer")]   # 試し実行は日数に関係なく判定だけ見る
+    if not due:
         return
     got = feedback_received_items(token)
     sent = sent_message_subjects(token)
     # 送信済みフォルダが読めているかの確認：お礼を送った注文のお礼メッセージが見えなければ、二重送信の恐れがあるので送らない
+    def n_sent(i):
+        return sum(SENT_MARK in s for s in sent.get(i, []))
     check = [i for i in thanked_ids if i]
-    seen = [i for i in check if any("Thank you" in s for s in sent.get(i, []))]
+    seen = [i for i in check if n_sent(i) >= FEEDBACK_ASK_BEFORE]
     folder_ok = bool(check) and len(seen) == len(check)
     print(f"評価のお願い：対象{len(due)}件／評価あり{len(got)}件／お礼が送信済みフォルダで見えた {len(seen)}/{len(check)}件")
     if dry_run:
         print("評価をもらった出品:", sorted(got))
-        print("送信済みフォルダ:", {k: v for k, v in sent.items()})
+        print("送信済みの通数:", {i: n_sent(i) for i in check})
     if not folder_ok:
         print("送信済みフォルダでお礼メッセージが確認できないため、評価のお願いは送りません")
         return
@@ -2249,8 +2256,9 @@ def ask_feedback(orders, token, thanked_ids, dry_run=False):
         if iid in got:
             print("評価のお願い：評価あり → 送らない", iid)
             continue
-        if any(FEEDBACK_ASK_SUBJECT in s for s in sent.get(iid, [])):
-            continue   # もう送った
+        if n_sent(iid) > FEEDBACK_ASK_BEFORE:
+            print("評価のお願い：もう送った（またはほかのメッセージを送った）ので送らない", iid)
+            continue
         if dry_run or not FEEDBACK_ASK_ENABLED:
             print("評価のお願い：送る予定（試し実行のため送っていません）", iid, o["buyer"])
             continue
@@ -2262,7 +2270,7 @@ def ask_feedback(orders, token, thanked_ids, dry_run=False):
         ok = ack in ("Success", "Warning")
         print("評価のお願い:", iid, "送信" if ok else "失敗 " + " / ".join(errs)[:200])
         if ok:
-            sent.setdefault(iid, []).append(FEEDBACK_ASK_SUBJECT)
+            sent.setdefault(iid, []).append(SENT_MARK)
 
 
 def feedbackcheck():
