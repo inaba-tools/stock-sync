@@ -1704,21 +1704,17 @@ def sync_sales(token, settings):
         for o in orders:
             if o["item_id"] in (res.get("new_ids") or []) and o.get("buyer"):
                 send_thanks(o, token)
-        # 届いた注文（売上シートの「お礼」が空のもの）→ お礼だけの短いメッセージを送り、送った日を記録
-        done = []
-        for o in orders:
-            if o["item_id"] in (res.get("thank_ids") or []) and o.get("buyer"):
-                at = DELIVERED_AT.get(o["order_id"])
-                if at and datetime.now(JST) - at < timedelta(hours=THANKS_DELAY_H):
-                    continue   # 届いてから24時間たっていない → 次の回以降に送る
-                if send_delivered_thanks(o, token):
-                    done.append(o["item_id"])
-        if done:
-            sheet("thanks_done", ids=done)
-        try:   # 届いて1週間たっても評価がない買い手に、1回だけ評価のお願い（評価と送信済みを必ず確認してから）
+        # 2026/10/31 届いたお礼と評価のお願いを1通にまとめる：届いて3日たった注文（売上シートの「お礼」が空のもの）に、
+        # 評価がまだないことと、送信済みが購入時のお礼1通だけであることを確かめてから送り、送った日を記録
+        pending = set(res.get("thank_ids") or [])
+        try:
+            send_combined_thanks(orders, token, pending)
+        except Exception as e:
+            print("お礼と評価のお願いでエラー（送っていません）:", str(e)[:200])
+        try:   # 以前のやり方で「届いたお礼」をもう送った注文だけ：届いて1週間たっても評価がなければ評価のお願いを1回
             thanked = [o["item_id"] for o in orders
-                       if DELIVERED_AT.get(o["order_id"]) and o["item_id"] not in (res.get("thank_ids") or [])]
-            ask_feedback(orders, token, thanked)
+                       if DELIVERED_AT.get(o["order_id"]) and o["item_id"] not in pending]
+            ask_feedback(orders, token, thanked, exclude=pending)
         except Exception as e:
             print("評価のお願いでエラー（送っていません）:", str(e)[:200])
 
@@ -2222,7 +2218,54 @@ def sent_message_subjects(token, days=60):
     return out
 
 
-def ask_feedback(orders, token, thanked_ids, dry_run=False):
+COMBINED_DELAY_DAYS = 3   # 2026/10/31 届いてから3日後に「お礼＋評価のお願い」を1通だけ送る
+COMBINED_SUBJECT = "Thank you!"
+COMBINED_MSG = ("Hi,\n"
+                "Thank you again for your purchase.\n"
+                "If you have a moment, I would be very grateful if you could leave feedback. "
+                "As a new seller, it helps me a lot.")
+
+
+def send_combined_thanks(orders, token, pending, dry_run=False):
+    now_ = datetime.now(JST)
+    due = []
+    for o in orders:
+        at = DELIVERED_AT.get(o.get("order_id"))
+        if o.get("item_id") in pending and o.get("buyer") and at and \
+                timedelta(days=COMBINED_DELAY_DAYS) <= now_ - at <= timedelta(days=FEEDBACK_ASK_MAX_DAYS):
+            due.append(o)
+    if not due:
+        return []
+    got = feedback_received_items(token)      # 読めなければエラー → 送らない
+    sent = sent_message_subjects(token)       # 読めなければエラー → 送らない
+    done = []
+    for o in due:
+        iid = o["item_id"]
+        n = sum(SENT_MARK in x for x in sent.get(iid, []))
+        if iid in got:
+            print("お礼と評価のお願い：評価あり → 送らない", iid)
+            continue
+        if n != 1:   # 購入時のお礼1通だけのはず。0通（送信済みが見えない）や2通以上（もう送った・個別に連絡した）は送らない
+            print(f"お礼と評価のお願い：送信済みが{n}通のため送らない", iid)
+            continue
+        if dry_run:
+            print("お礼と評価のお願い：送る予定（試し実行のため送っていません）", iid, o["buyer"])
+            continue
+        ack, errs, root = trading_call_root(
+            "AddMemberMessageAAQToPartner",
+            f"<ItemID>{iid}</ItemID><MemberMessage><Subject>{COMBINED_SUBJECT}</Subject>"
+            f"<Body>{escape(COMBINED_MSG)}</Body><QuestionType>General</QuestionType>"
+            f"<RecipientID>{escape(o['buyer'])}</RecipientID></MemberMessage>", token)
+        ok = ack in ("Success", "Warning")
+        print("お礼と評価のお願い:", iid, "送信" if ok else "失敗 " + " / ".join(errs)[:200])
+        if ok:
+            done.append(iid)
+    if done:
+        sheet("thanks_done", ids=done)
+    return done
+
+
+def ask_feedback(orders, token, thanked_ids, dry_run=False, exclude=()):
     """届いて7日たった注文のうち、評価がまだなく、お願いもまだ送っていない買い手にだけ1回送る。
     評価・送信済みが確認できないときは送らない（必ず確認してから送る）"""
     now_ = datetime.now(JST)
@@ -2232,6 +2275,8 @@ def ask_feedback(orders, token, thanked_ids, dry_run=False):
         if not at or not o.get("buyer"):
             continue
         age = now_ - at
+        if o.get("item_id") in exclude:
+            continue   # 新しいやり方（お礼＋評価のお願いを1通）の注文は対象外
         if timedelta(days=FEEDBACK_ASK_DAYS) <= age <= timedelta(days=FEEDBACK_ASK_MAX_DAYS):
             due.append(o)
     if dry_run:
