@@ -2167,7 +2167,7 @@ def send_delivered_thanks(o, token):
 
 
 # ---------- 2026/10/31 届いて1週間たっても評価がない買い手に、1回だけ評価のお願いを送る ----------
-FEEDBACK_ASK_ENABLED = False   # 試し実行（feedbackcheck）で確かめてから True にする
+FEEDBACK_ASK_ENABLED = True    # 2026/10/31 試し実行で確認済み・文面は本人確認済み
 FEEDBACK_ASK_DAYS = 7          # 届いてから何日たったら送るか
 FEEDBACK_ASK_MAX_DAYS = 30     # これより前に届いたものには送らない
 FEEDBACK_ASK_SUBJECT = "A small favor"
