@@ -2171,8 +2171,10 @@ FEEDBACK_ASK_ENABLED = False   # 試し実行（feedbackcheck）で確かめて�
 FEEDBACK_ASK_DAYS = 7          # 届いてから何日たったら送るか
 FEEDBACK_ASK_MAX_DAYS = 30     # これより前に届いたものには送らない
 FEEDBACK_ASK_SUBJECT = "A small favor"
-FEEDBACK_ASK_MSG = ("Hi! If you're happy with your item, I'd really appreciate it if you could leave feedback. "
-                    "Thank you!")
+FEEDBACK_ASK_MSG = ("Hi, I hope you are enjoying your item.\n"
+                    "If you have a moment, I would be very grateful if you could leave feedback. "
+                    "As a new seller, it helps me a lot.\n"
+                    "Thank you again for your purchase!")
 # 送信済みフォルダでは件名が「〇〇 has sent a question about item #…」に置き換わるため、件名ではなく通数で数える。
 # この出品で送った通数が、購入時のお礼＋届いたお礼の2通までなら未送信（3通以上なら送らない＝安全側）
 SENT_MARK = "has sent a question about item"
