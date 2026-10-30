@@ -2171,7 +2171,7 @@ FEEDBACK_ASK_ENABLED = False   # 試し実行（feedbackcheck）で確かめて�
 FEEDBACK_ASK_DAYS = 7          # 届いてから何日たったら送るか
 FEEDBACK_ASK_MAX_DAYS = 30     # これより前に届いたものには送らない
 FEEDBACK_ASK_SUBJECT = "A small favor"
-FEEDBACK_ASK_MSG = ("Hi, I hope you are enjoying your item.\n"
+FEEDBACK_ASK_MSG = ("Hi,\n"
                     "If you have a moment, I would be very grateful if you could leave feedback. "
                     "As a new seller, it helps me a lot.\n"
                     "Thank you again for your purchase!")
