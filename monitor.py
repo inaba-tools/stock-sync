@@ -16,7 +16,7 @@ import unicodedata
 import math
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -1715,6 +1715,12 @@ def sync_sales(token, settings):
                     done.append(o["item_id"])
         if done:
             sheet("thanks_done", ids=done)
+        try:   # 届いて1週間たっても評価がない買い手に、1回だけ評価のお願い（評価と送信済みを必ず確認してから）
+            thanked = [o["item_id"] for o in orders
+                       if DELIVERED_AT.get(o["order_id"]) and o["item_id"] not in (res.get("thank_ids") or [])]
+            ask_feedback(orders, token, thanked)
+        except Exception as e:
+            print("評価のお願いでエラー（送っていません）:", str(e)[:200])
 
 
 def research_row(r, info, settings):
@@ -2158,6 +2164,115 @@ def send_delivered_thanks(o, token):
     ok = ack in ("Success", "Warning")
     print("届いたお礼のメッセージ:", o["item_id"], "送信" if ok else "失敗 " + " / ".join(errs)[:200])
     return ok
+
+
+# ---------- 2026/10/31 届いて1週間たっても評価がない買い手に、1回だけ評価のお願いを送る ----------
+FEEDBACK_ASK_ENABLED = False   # 試し実行（feedbackcheck）で確かめてから True にする
+FEEDBACK_ASK_DAYS = 7          # 届いてから何日たったら送るか
+FEEDBACK_ASK_MAX_DAYS = 30     # これより前に届いたものには送らない
+FEEDBACK_ASK_SUBJECT = "A small favor"
+FEEDBACK_ASK_MSG = ("Hi, I hope you are enjoying your item. "
+                    "If you have a moment, I would be very grateful if you could leave feedback. "
+                    "As a new seller, it helps me a lot. Thank you again for your purchase!")
+
+
+def feedback_received_items(token):
+    """評価をもらった出品番号（売り手として受け取った評価すべて）。読めなければエラー（＝送らない）"""
+    items, page = set(), 1
+    while page <= 10:
+        ack, errs, root = trading_call_root(
+            "GetFeedback",
+            "<FeedbackType>FeedbackReceivedAsSeller</FeedbackType><DetailLevel>ReturnAll</DetailLevel>"
+            f"<Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>{page}</PageNumber></Pagination>", token)
+        if ack not in ("Success", "Warning"):
+            raise RuntimeError("評価の確認に失敗：" + " / ".join(errs)[:200])
+        for fd in root.iter("{urn:ebay:apis:eBLBaseComponents}FeedbackDetail"):
+            iid = fd.findtext("e:ItemID", default="", namespaces=NS)
+            if iid:
+                items.add(iid)
+        total = int(root.findtext(".//e:PaginationResult/e:TotalNumberOfPages", default="1", namespaces=NS) or 1)
+        if page >= total:
+            break
+        page += 1
+    return items
+
+
+def sent_message_subjects(token, days=60):
+    """送信済みフォルダのメッセージ：出品番号 → 件名の一覧。読めなければエラー（＝送らない）"""
+    out = {}
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    ack, errs, root = trading_call_root(
+        "GetMyMessages",
+        "<FolderID>1</FolderID><DetailLevel>ReturnHeaders</DetailLevel>"
+        f"<StartTime>{start.strftime('%Y-%m-%dT%H:%M:%S.000Z')}</StartTime>"
+        f"<EndTime>{end.strftime('%Y-%m-%dT%H:%M:%S.000Z')}</EndTime>", token)
+    if ack not in ("Success", "Warning"):
+        raise RuntimeError("送信済みメッセージの確認に失敗：" + " / ".join(errs)[:200])
+    for m in root.iter("{urn:ebay:apis:eBLBaseComponents}Message"):
+        iid = m.findtext("e:ItemID", default="", namespaces=NS)
+        subj = m.findtext("e:Subject", default="", namespaces=NS)
+        if iid:
+            out.setdefault(iid, []).append(subj)
+    return out
+
+
+def ask_feedback(orders, token, thanked_ids, dry_run=False):
+    """届いて7日たった注文のうち、評価がまだなく、お願いもまだ送っていない買い手にだけ1回送る。
+    評価・送信済みが確認できないときは送らない（必ず確認してから送る）"""
+    now_ = datetime.now(JST)
+    due = []
+    for o in orders:
+        at = DELIVERED_AT.get(o.get("order_id"))
+        if not at or not o.get("buyer"):
+            continue
+        age = now_ - at
+        if timedelta(days=FEEDBACK_ASK_DAYS) <= age <= timedelta(days=FEEDBACK_ASK_MAX_DAYS):
+            due.append(o)
+    if not due and not dry_run:
+        return
+    got = feedback_received_items(token)
+    sent = sent_message_subjects(token)
+    # 送信済みフォルダが読めているかの確認：お礼を送った注文のお礼メッセージが見えなければ、二重送信の恐れがあるので送らない
+    check = [i for i in thanked_ids if i]
+    seen = [i for i in check if any("Thank you" in s for s in sent.get(i, []))]
+    folder_ok = bool(check) and len(seen) == len(check)
+    print(f"評価のお願い：対象{len(due)}件／評価あり{len(got)}件／お礼が送信済みフォルダで見えた {len(seen)}/{len(check)}件")
+    if dry_run:
+        print("評価をもらった出品:", sorted(got))
+        print("送信済みフォルダ:", {k: v for k, v in sent.items()})
+    if not folder_ok:
+        print("送信済みフォルダでお礼メッセージが確認できないため、評価のお願いは送りません")
+        return
+    for o in due:
+        iid = o["item_id"]
+        if iid in got:
+            print("評価のお願い：評価あり → 送らない", iid)
+            continue
+        if any(FEEDBACK_ASK_SUBJECT in s for s in sent.get(iid, [])):
+            continue   # もう送った
+        if dry_run or not FEEDBACK_ASK_ENABLED:
+            print("評価のお願い：送る予定（試し実行のため送っていません）", iid, o["buyer"])
+            continue
+        ack, errs, root = trading_call_root(
+            "AddMemberMessageAAQToPartner",
+            f"<ItemID>{iid}</ItemID><MemberMessage><Subject>{FEEDBACK_ASK_SUBJECT}</Subject>"
+            f"<Body>{escape(FEEDBACK_ASK_MSG)}</Body><QuestionType>General</QuestionType>"
+            f"<RecipientID>{escape(o['buyer'])}</RecipientID></MemberMessage>", token)
+        ok = ack in ("Success", "Warning")
+        print("評価のお願い:", iid, "送信" if ok else "失敗 " + " / ".join(errs)[:200])
+        if ok:
+            sent.setdefault(iid, []).append(FEEDBACK_ASK_SUBJECT)
+
+
+def feedbackcheck():
+    """評価のお願いの試し実行（送らずに、評価・送信済みフォルダの読み取りと送る予定だけ表示）"""
+    token = get_access_token()
+    orders = ebay_orders(token)
+    dd = delivered_dates([o["order_id"] for o in orders if o.get("shipped")], token)
+    print("配達済み:", dd)
+    thanked = [o["item_id"] for o in orders if dd.get(o["order_id"])]
+    ask_feedback(orders, token, thanked, dry_run=True)
 
 
 def thanks(item_ids):
@@ -3367,6 +3482,8 @@ if __name__ == "__main__":
             tk = get_access_token()
             for iid in sys.argv[2:]:
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "feedbackcheck":
+            feedbackcheck()
         elif len(sys.argv) > 1 and sys.argv[1] == "thanks":
             thanks(sys.argv[2:])
         elif len(sys.argv) > 1 and sys.argv[1] == "retitle":
