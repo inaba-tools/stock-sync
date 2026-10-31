@@ -32,8 +32,10 @@ jobs:
 
       - run: python -m playwright install --with-deps chromium
 
-      - name: 国ごとの送料の試し（2件）（2026/10/31）
-        run: python monitor.py regiontest 366737879068 366742508340
+      - name: 国ごとの送料の確認（2026/10/31）
+        run: |
+          python monitor.py showpolicy 366742508340
+          python monitor.py noopcheck 366737879068
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}

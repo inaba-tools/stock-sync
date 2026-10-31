@@ -3724,6 +3724,12 @@ if __name__ == "__main__":
             tk = get_access_token()
             for iid in sys.argv[2:]:
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "noopcheck":   # 値段を変えずに書き換えを試す（エラーの原因調べ）
+            tk = get_access_token()
+            for iid in sys.argv[2:]:
+                a = ebay_active_items(tk).get(iid, {})
+                print(iid, a, trading_call("ReviseFixedPriceItem",
+                      f"<Item><ItemID>{iid}</ItemID><StartPrice>{a['price']:.2f}</StartPrice></Item>", tk))
         elif len(sys.argv) > 1 and sys.argv[1] == "createpolicy":
             create_region_policy()
         elif len(sys.argv) > 1 and sys.argv[1] == "regiontest":
