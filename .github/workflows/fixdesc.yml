@@ -32,8 +32,8 @@ jobs:
 
       - run: python -m playwright install --with-deps chromium
 
-      - name: 配送ポリシーの確認（読み取りだけ）（2026/10/31）
-        run: python monitor.py sheetkeys
+      - name: 国ごとの送料の配送ポリシーを作る（2026/10/31）
+        run: python monitor.py createpolicy
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}

@@ -1064,19 +1064,69 @@ def duty_pct(settings):
         return DUTY_PCT
 
 
-def ship_for(settings, model=""):
-    """送料の見込み（円）。設定シートの送料と、ジャンルごとの送料（重い・箱が大きいもの）の高いほう"""
-    base = float(settings.get("ship_jpy") or 3000)
-    return max(base, float((game_info(model or "") or {}).get("ship") or 0))
+# ---------- 2026/10/31 送料を国ごとに分ける ----------
+# 商品の値段＝仕入れ＋利益＋手数料だけ。送料は「送るもの × 送り先」ごとに別に受け取り、アメリカだけ関税分も送料に足す。
+# 金額はSpeedPAK（FedEx International Connect Plus）2026年の料金表と、実際にアメリカへ送った3件の実費（約3,500円）から。
+# 管理表の「送料表」シートと同じ内容（変えるときは両方そろえる）
+SHIP_REGIONS = [   # (名前, eBayの地域コード)。アメリカは国内扱いの送料、ほかは国際送料（最大4つ）
+    ("US", None),
+    ("CA_MX", ["CA", "MX"]),
+    ("EU", ["Europe"]),
+    ("ASIA", ["Asia"]),
+    ("AU", ["AU"]),
+]
+SHIP_TABLE = {   # 円（実際にかかる送料。アメリカは関税を除く）
+    "小": {"US": 3500, "CA_MX": 3300, "EU": 3600, "ASIA": 3100, "AU": 8500},   # ガラケー・デジカメ・ゲーム機・MD・時計など
+    "中": {"US": 4000, "CA_MX": 3800, "EU": 4000, "ASIA": 3400, "AU": 9500},   # CDプレーヤー
+    "大": {"US": 5600, "CA_MX": 5300, "EU": 4000, "ASIA": 3400, "AU": 9500},   # ビデオカメラ
+}
+REGION_SHIP_PROFILE = "SpeedPAK by region"   # 国ごとの送料を入れる配送ポリシー（create_region_policy で作る）
+
+
+def ship_size(model=""):
+    kind = (game_info(model or "") or {}).get("kind")
+    return "大" if kind == "video" else "中" if kind == "cd" else "小"
+
+
+def ship_for(settings, model="", region="US"):
+    """送料の見込み（円）。送料表の金額（アメリカは関税を除く）"""
+    return float(SHIP_TABLE[ship_size(model)][region])
+
+
+def fee_rate(settings, model=""):
+    """売れた金額（商品＋送料）にかかる手数料の割合（関税は含まない）"""
+    return (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + ad_pct(model)) / 100
+
+
+def item_from_total(total_usd, model, settings):
+    """アメリカの人が払う合計（商品＋送料）→ 商品の値段"""
+    fx, F, d = usd_jpy(settings), fee_rate(settings, model), duty_pct(settings) / 100
+    return (float(total_usd) - ship_for(settings, model) / fx / (1 - F)) / (1 + d / (1 - F))
+
+
+def ship_charges(item_usd, model, settings):
+    """国ごとに受け取る送料（ドル）。アメリカは関税（商品の値段×関税率）も含める"""
+    fx, F, d = usd_jpy(settings), fee_rate(settings, model), duty_pct(settings) / 100
+    out = {}
+    for name, _ in SHIP_REGIONS:
+        jpy = ship_for(settings, model, name) + (d * float(item_usd) * fx if name == "US" else 0)
+        out[name] = round(jpy / fx / (1 - F), 2)
+    return out
+
+
+def profit_from_total(total_usd, cost_jpy, model, settings):
+    """アメリカの人に合計 total_usd で売れたときの利益（円）。どの国に売れても利益は同じになる"""
+    if REGION_SHIP_MODE != "all":   # 切り替え前：送料無料・関税は合計にかかる（今まで通り）
+        F = fee_rate(settings, model) + duty_pct(settings) / 100
+        return float(total_usd) * usd_jpy(settings) * (1 - F) - ship_for(settings, model) - float(cost_jpy)
+    item = item_from_total(total_usd, model, settings)
+    return item * (1 - fee_rate(settings, model)) * usd_jpy(settings) - float(cost_jpy)
 
 
 def profit(cost_jpy, sale_usd, settings, model=""):
     sale_usd = adj(sale_usd, settings)
-    fx = usd_jpy(settings)
-    fee = float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + ad_pct(model) + duty_pct(settings)
-    ship = ship_for(settings, model)
-    revenue = sale_usd * fx
-    p = revenue * (1 - fee / 100) - ship - cost_jpy
+    revenue = sale_usd * usd_jpy(settings)
+    p = profit_from_total(sale_usd, cost_jpy, model, settings)
     return round(p), (round(p / revenue * 100, 1) if revenue else 0)
 
 
@@ -1331,8 +1381,7 @@ def _main():
                 if status == "on_sale" and (info or {}).get("price"):
                     p_txt = ""
                     if s.get("usd"):
-                        fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100 + duty_pct(settings) / 100
-                        p = s["usd"] * usd_jpy(settings) * (1 - fee) - ship_for(settings, r.get("query")) - info["price"]
+                        p = profit_from_total(s["usd"], info["price"], r.get("query"), settings)
                         p_txt = f"・見込み利益 約{int(p):,}円"
                         upd["profit"] = round(p)
                     upd["cost"] = info["price"]
@@ -1402,10 +1451,8 @@ def _main():
                             new_price = slow
                         if new_price:
                             # 実際の出品価格で売れたときの利益をシートに書く
-                            fx = usd_jpy(settings)
-                            fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(r.get("query")) / 100 + duty_pct(settings) / 100
-                            rev = new_price * fx
-                            p = rev * (1 - fee) - ship_for(settings, r.get("query")) - info["price"]
+                            rev = new_price * usd_jpy(settings)
+                            p = profit_from_total(new_price, info["price"], r.get("query"), settings)
                             upd["cost"] = info["price"]
                             upd["profit"] = round(p)
                             listed_profit[r["row"]] = (model_key(r.get("query")), p, r["ebay_item_id"])
@@ -1413,14 +1460,18 @@ def _main():
                             cur = act.get("price")
                             same = (abs(cur - new_price) < 0.005) if cur is not None \
                                 else f"${new_price:.2f}" in (r.get("result") or "")
+                            if region_ship_on(r["ebay_item_id"]) and not act.get("region_ship"):
+                                same = False   # まだ国ごとの送料になっていない出品は切り替える
                             if not same:   # 値段が変わるときだけeBayを更新（結果欄は「販売中」だけ。利益は想定利益の列に出る）
-                                ack, errs = trading_call("ReviseInventoryStatus",
-                                    f"<InventoryStatus><ItemID>{r['ebay_item_id']}</ItemID>"
-                                    f"<StartPrice>{new_price:.2f}</StartPrice></InventoryStatus>", token)
+                                ack, errs = revise_price(r["ebay_item_id"], new_price, r.get("query"), settings, token)
                                 if ack in ("Success", "Warning") and cur is not None and new_price < cur:
                                     upd["last_drop"] = now()
-                            if act.get("watch"):
-                                offer_targets[r["ebay_item_id"]] = (new_price, floor)
+                            if act.get("watch"):   # オファーは商品の値段で送る（送料は別）
+                                if region_ship_on(r["ebay_item_id"]):
+                                    offer_targets[r["ebay_item_id"]] = (item_from_total(new_price, r.get("query"), settings),
+                                                                        item_from_total(floor, r.get("query"), settings))
+                                else:
+                                    offer_targets[r["ebay_item_id"]] = (new_price, floor)
                     except Exception as e:
                         print(f"値段の見直しに失敗（eBay {r['ebay_item_id']}）:", repr(e)[:150])
             else:
@@ -1854,13 +1905,56 @@ WATCH_STEP_USD = 2.0        # ウォッチされている商品は $2（約300�
 WATCH_INTERVAL_H = 3        # 値下げの間隔（時間）（2026/10/22 1時間→3時間）
 
 
+REGION_SHIP_MODE = "off"     # "off"：今まで通り／"test"：REGION_SHIP_TEST_IDS の出品だけ／"all"：全部（新規出品も）
+REGION_SHIP_TEST_IDS = set()
+
+
+def region_ship_on(item_id):
+    if REGION_SHIP_MODE == "all":
+        return True
+    return REGION_SHIP_MODE == "test" and str(item_id) in REGION_SHIP_TEST_IDS
+
+
+def ship_override_xml(item_usd, model, settings):
+    """配送ポリシー「SpeedPAK by region」の送料を、この出品の金額に書き換える"""
+    ch = ship_charges(item_usd, model, settings)
+    parts = [("Domestic", 1, ch["US"])] + [("International", i, ch[name])
+                                            for i, (name, _) in enumerate(SHIP_REGIONS[1:], start=1)]
+    return "<ShippingServiceCostOverrideList>" + "".join(
+        f"<ShippingServiceCostOverride><ShippingServicePriority>{pri}</ShippingServicePriority>"
+        f"<ShippingServiceType>{typ}</ShippingServiceType>"
+        f'<ShippingServiceCost currencyID="USD">{cost:.2f}</ShippingServiceCost></ShippingServiceCostOverride>'
+        for typ, pri, cost in parts) + "</ShippingServiceCostOverrideList>"
+
+
+def revise_price(item_id, total_usd, model, settings, token):
+    """出品中の値段を変える。国ごとの送料の出品は、商品の値段と国ごとの送料をまとめて書き換える"""
+    if not region_ship_on(item_id):
+        return trading_call("ReviseInventoryStatus",
+                            f"<InventoryStatus><ItemID>{item_id}</ItemID>"
+                            f"<StartPrice>{total_usd:.2f}</StartPrice></InventoryStatus>", token)
+    item_usd = round(item_from_total(total_usd, model, settings), 2)
+    ack, errs = trading_call(
+        "ReviseFixedPriceItem",
+        f"<Item><ItemID>{item_id}</ItemID><StartPrice>{item_usd:.2f}</StartPrice>"
+        f"<SellerProfiles><SellerShippingProfile><ShippingProfileName>{escape(REGION_SHIP_PROFILE)}"
+        f"</ShippingProfileName></SellerShippingProfile></SellerProfiles>"
+        + ship_override_xml(item_usd, model, settings) + "</Item>", token)
+    print(f"国ごとの送料に変更：{item_id} 合計${total_usd:.2f} → 商品${item_usd:.2f}＋送料",
+          ship_charges(item_usd, model, settings), ack, " / ".join(errs)[:200])
+    return ack, errs
+
+
 def floor_price_usd(cost, query, settings, profit=None):
     """利益がちょうど profit 円（省略時は2,000円）残る値段。2026/10/26 出品・値下げはすべてこの値段にそろえる"""
-    fx = usd_jpy(settings)
-    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
-    ship = ship_for(settings, query)
+    # 2026/10/31 返すのは「アメリカの人が払う合計（商品＋送料・関税）」。相場（ほぼ送料無料の値段）と比べるため
+    fx, F, d = usd_jpy(settings), fee_rate(settings, query), duty_pct(settings) / 100
     min_profit = PRICE_FLOOR_PROFIT if profit is None else profit
-    return math.ceil((cost + ship + min_profit) / max(0.05, 1 - fee) / fx) - 0.01
+    if REGION_SHIP_MODE != "all":   # 切り替え前：今まで通り
+        return math.ceil((float(cost) + ship_for(settings, query) + min_profit) / max(0.05, 1 - F - d) / fx) - 0.01
+    item = (float(cost) + min_profit) / (1 - F) / fx
+    total = item + (ship_for(settings, query) / fx + d * item) / (1 - F)
+    return math.ceil(total) - 0.01
 
 
 SLOW_DROP_STEP_USD = 2.0     # 「ゆっくり値下げ」の出品：30分ごと（自動実行のたび）に $2（約300円）ずつ下げる
@@ -1913,9 +2007,7 @@ def expected_profit(cost, query, settings):
                                                       min_profit_for(cost, settings, query)):
             return None
         target = min(target, floor)   # 出品する値段（利益2,000円の値段が上限）
-        fx = usd_jpy(settings)
-        fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(query) / 100 + duty_pct(settings) / 100
-        return target * fx * (1 - fee) - ship_for(settings, query) - float(cost)
+        return profit_from_total(target, cost, query, settings)
     except (TypeError, ValueError):
         return None
 
@@ -2032,8 +2124,13 @@ def ebay_active_items(token):
                     days = (nowu - datetime.fromisoformat(start.replace("Z", "+00:00"))).total_seconds() / 86400
                 except ValueError:
                     days = None
+            us_ship = it.findtext("e:ShippingDetails/e:ShippingServiceOptions/e:ShippingServiceCost", default="",
+                                  namespaces=NS)
+            us_ship = float(us_ship) if us_ship else 0.0
+            # price はアメリカの人が払う合計（商品＋送料）。国ごとの送料になった出品は送料が0より大きい
             out[item_id] = {"watch": int(it.findtext("e:WatchCount", default="0", namespaces=NS) or 0),
-                            "price": float(price) if price else None, "days": days}
+                            "price": (float(price) + us_ship) if price else None, "days": days,
+                            "region_ship": us_ship > 0}
         pages = root.findtext("e:ActiveList/e:PaginationResult/e:TotalNumberOfPages", default="1", namespaces=NS)
         if page_no >= int(pages or 1):
             break
@@ -2753,12 +2850,18 @@ def create_listing(r, info, detail, settings, token):
         specifics.append(("Color", color or "As Pictured"))
         specifics.append(("Storage Capacity", storage_of(model)))
     nvl = "".join(f"<NameValueList><Name>{escape(n)}</Name><Value>{escape(v)}</Value></NameValueList>" for n, v in specifics)
+    if region_ship_on("new"):   # 国ごとの送料：商品の値段は送料・関税を除いた分
+        list_item_price = round(item_from_total(price, model, settings), 2)
+        ship_profile_name = REGION_SHIP_PROFILE
+        ship_override = ship_override_xml(list_item_price, model, settings)
+    else:
+        list_item_price, ship_profile_name, ship_override = price, str(settings.get("ship_profile")), ""
     sku = sku_for(model) or re.sub(r"[^A-Za-z0-9]", "", r["mercari_url"].rstrip("/").split("/")[-1])[:50]
     item = (
         f"<Item><Title>{escape(title_en)}</Title>"
         f"<Description><![CDATA[{desc_html}]]></Description>"
         f"<PrimaryCategory><CategoryID>{category_id}</CategoryID></PrimaryCategory>"
-        f'<StartPrice currencyID="USD">{price:.2f}</StartPrice>'
+        f'<StartPrice currencyID="USD">{list_item_price:.2f}</StartPrice>'
         f"<ConditionID>{cond_id}</ConditionID>"
         + (f"<ConditionDescription>{escape(cond_en[:900])}</ConditionDescription>" if cond_id != 1000 else "") +
         "<Country>JP</Country><Location>Japan</Location><Currency>USD</Currency><Site>US</Site>"
@@ -2769,8 +2872,8 @@ def create_listing(r, info, detail, settings, token):
         "<SellerProfiles>"
         f"<SellerPaymentProfile><PaymentProfileName>{escape(str(settings.get('pay_profile') or 'Payment'))}</PaymentProfileName></SellerPaymentProfile>"
         f"<SellerReturnProfile><ReturnProfileName>{escape(str(settings.get('return_profile') or 'Return'))}</ReturnProfileName></SellerReturnProfile>"
-        f"<SellerShippingProfile><ShippingProfileName>{escape(str(settings.get('ship_profile')))}</ShippingProfileName></SellerShippingProfile>"
-        "</SellerProfiles></Item>")
+        f"<SellerShippingProfile><ShippingProfileName>{escape(ship_profile_name)}</ShippingProfileName></SellerShippingProfile>"
+        "</SellerProfiles>" + ship_override + "</Item>")
     ack, errors, root = trading_call_root("AddFixedPriceItem", item, token)
     item_id = root.findtext("e:ItemID", default="", namespaces=NS)
     if ack in ("Success", "Warning") and item_id:
@@ -2990,9 +3093,6 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
         items += yahoo_search(gi.get("yahoo_q", q) if gi else q)
     except Exception:
         pass
-    fx = usd_jpy(settings)
-    fee = (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2)) / 100 + ad_pct(q) / 100 + duty_pct(settings) / 100
-    ship = ship_for(settings, q)
     best = None
     for it in items:
         u = it["url"].split("?")[0]
@@ -3005,7 +3105,7 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
             continue
         if gi and game_reject_reason(title, q, it["price"], sold_usd, settings):
             continue
-        p = sold_usd * fx * (1 - fee) - ship - it["price"]
+        p = profit_from_total(sold_usd, it["price"], q, settings)
         if p > 0 and (best is None or p > best["profit"]):
             best = {"url": u, "price": it["price"], "profit": p, "title": title}
     return best
@@ -3463,6 +3563,72 @@ def trim():
     sheet("log", message=msg)
 
 
+def create_region_policy():
+    """国ごとの送料を入れる配送ポリシー「SpeedPAK by region」を作る（今の「Keitai SpeedPAK Free Shipping」を元にする）。
+    金額はここでは仮。出品ごとに ShippingServiceCostOverrideList で書き換える"""
+    settings = sheet("list").get("settings", {})
+    base = "https://api.ebay.com/sell/account/v1/fulfillment_policy"
+    h = {"Authorization": f"Bearer {get_access_token()}", "Content-Type": "application/json",
+         "Content-Language": "en-US", "Accept-Language": "en-US"}
+    r = requests.get(base, params={"marketplace_id": "EBAY_US"}, headers=h, timeout=30)
+    r.raise_for_status()
+    pols = r.json().get("fulfillmentPolicies", [])
+    if any(x.get("name") == REGION_SHIP_PROFILE for x in pols):
+        print("すでにあります:", REGION_SHIP_PROFILE)
+        return
+    src = next(x for x in pols if x.get("name") == str(settings.get("ship_profile") or "").strip())
+    dom = next(o for o in src["shippingOptions"] if o["optionType"] == "DOMESTIC")["shippingServices"][0]
+    intl = next(o for o in src["shippingOptions"] if o["optionType"] == "INTERNATIONAL")["shippingServices"][0]
+
+    def svc(code, order, regions=None):
+        x = {"sortOrder": order, "shippingCarrierCode": "GENERIC", "shippingServiceCode": code,
+             "shippingCost": {"value": "30.00", "currency": "USD"},
+             "additionalShippingCost": {"value": "0.00", "currency": "USD"}, "freeShipping": False}
+        if regions:
+            x["shipToLocations"] = {"regionIncluded": [{"regionName": g} for g in regions]}
+        return x
+    pol = {
+        "name": REGION_SHIP_PROFILE,
+        "description": "国ごとの送料（2026/10/31）。金額は出品ごとにツールが書き換える",
+        "marketplaceId": "EBAY_US",
+        "categoryTypes": src["categoryTypes"],
+        "handlingTime": src["handlingTime"],
+        "shipToLocations": src["shipToLocations"],
+        "shippingOptions": [
+            {"optionType": "DOMESTIC", "costType": "FLAT_RATE",
+             "shippingServices": [svc(dom["shippingServiceCode"], 1)]},
+            {"optionType": "INTERNATIONAL", "costType": "FLAT_RATE",
+             "shippingServices": [svc(intl["shippingServiceCode"], i, regs)
+                                  for i, (_, regs) in enumerate(SHIP_REGIONS[1:], start=1)]},
+        ],
+        "globalShipping": False, "pickupDropOff": False, "freightShipping": False,
+    }
+    r2 = requests.post(base, headers=h, json=pol, timeout=30)
+    print("作成:", r2.status_code, r2.text[:1500])
+
+
+def region_test(ids):
+    """指定した出品だけ、今の合計金額のまま国ごとの送料に切り替える（試し）"""
+    global REGION_SHIP_MODE
+    REGION_SHIP_MODE = "test"
+    REGION_SHIP_TEST_IDS.update(ids)
+    data = sheet("list")
+    settings = data.get("settings", {})
+    token = get_access_token()
+    act = ebay_active_items(token)
+    rows = {r["ebay_item_id"]: r for r in data["rows"] if r.get("ebay_item_id")}
+    for iid in ids:
+        r, a = rows.get(iid), act.get(iid)
+        if not r or not a:
+            print("見つかりません:", iid)
+            continue
+        print(iid, r.get("query"), "今の合計:", a["price"], "送料表サイズ:", ship_size(r.get("query")))
+        revise_price(iid, a["price"], r.get("query"), settings, token)
+    act2 = ebay_active_items(token)
+    for iid in ids:
+        print("変更後:", iid, act2.get(iid))
+
+
 def show_policy(item_id=""):
     """配送ポリシーの中身と、出品1件の送料設定を表示する（読み取りだけ）"""
     base = "https://api.ebay.com/sell/account/v1/fulfillment_policy"
@@ -3558,6 +3724,10 @@ if __name__ == "__main__":
             tk = get_access_token()
             for iid in sys.argv[2:]:
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "createpolicy":
+            create_region_policy()
+        elif len(sys.argv) > 1 and sys.argv[1] == "regiontest":
+            region_test(sys.argv[2:])
         elif len(sys.argv) > 1 and sys.argv[1] == "sheetkeys":
             d = sheet("list")
             print("list のキー:", list(d.keys()))
