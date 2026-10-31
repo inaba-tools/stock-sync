@@ -3740,7 +3740,8 @@ if __name__ == "__main__":
             iid = sys.argv[2]
             a = ebay_active_items(tk).get(iid, {})
             orig = a["price"]
-            for us in [float(x) for x in sys.argv[3:]]:
+            pairs = [tuple(float(v) for v in x.split("/")) if "/" in x else (float(x), 20.0) for x in sys.argv[3:]]
+            for us, intl in pairs:
                 body = (f"<Item><ItemID>{iid}</ItemID><StartPrice>{orig:.2f}</StartPrice>"
                         f"<SellerProfiles><SellerShippingProfile><ShippingProfileName>{REGION_SHIP_PROFILE}"
                         "</ShippingProfileName></SellerShippingProfile></SellerProfiles>"
@@ -3750,9 +3751,9 @@ if __name__ == "__main__":
                         + "".join("<ShippingServiceCostOverride>"
                                   f"<ShippingServicePriority>{k}</ShippingServicePriority><ShippingServiceType>International</ShippingServiceType>"
                                   f'<ShippingServiceCost currencyID="USD">{c:.2f}</ShippingServiceCost></ShippingServiceCostOverride>'
-                                  for k, c in [(1, 20), (2, 20), (3, 20), (4, 20)])
+                                  for k, c in [(1, intl), (2, intl), (3, intl), (4, intl)])
                         + "</ShippingServiceCostOverrideList></Item>")
-                print("アメリカ送料", us, trading_call("ReviseFixedPriceItem", body, tk))
+                print("アメリカ送料", us, "国際送料", intl, trading_call("ReviseFixedPriceItem", body, tk))
             back = (f"<Item><ItemID>{iid}</ItemID><StartPrice>{orig:.2f}</StartPrice><SellerProfiles><SellerShippingProfile>"
                     f"<ShippingProfileName>Keitai SpeedPAK Free Shipping</ShippingProfileName></SellerShippingProfile></SellerProfiles></Item>")
             print("元に戻す", trading_call("ReviseFixedPriceItem", back, tk), ebay_active_items(tk).get(iid))
