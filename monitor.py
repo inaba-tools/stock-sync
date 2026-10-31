@@ -1103,8 +1103,18 @@ def fee_rate(settings, model=""):
 US_SHIP_CAP_PHONE = 25.0
 
 
+US_SHIP_CAP_TRY = [50.0, 45.0, 40.0, 35.0, 30.0, 25.0]   # SpeedPAKの上限エラーのとき、この順に下げてやり直す
+_cap_learned = {}   # 型番 → 通ったアメリカ送料の上限（同じ実行の中で覚えておく）
+
+
 def us_ship_cap(model):
+    if model_key(model) in _cap_learned:
+        return _cap_learned[model_key(model)]
     return None if game_info(model or "") else US_SHIP_CAP_PHONE
+
+
+def is_ship_cap_error(errs):
+    return any(re.search(r"exceeds .*maximum allowed|improper words", e or "", re.I) for e in errs)
 
 
 def item_from_total(total_usd, model, settings):
@@ -1953,13 +1963,21 @@ def revise_price(item_id, total_usd, model, settings, token):
         return trading_call("ReviseInventoryStatus",
                             f"<InventoryStatus><ItemID>{item_id}</ItemID>"
                             f"<StartPrice>{total_usd:.2f}</StartPrice></InventoryStatus>", token)
-    item_usd = round(item_from_total(total_usd, model, settings), 2)
-    ack, errs = trading_call(
-        "ReviseFixedPriceItem",
-        f"<Item><ItemID>{item_id}</ItemID><StartPrice>{item_usd:.2f}</StartPrice>"
-        f"<SellerProfiles><SellerShippingProfile><ShippingProfileName>{escape(REGION_SHIP_PROFILE)}"
-        f"</ShippingProfileName></SellerShippingProfile></SellerProfiles>"
-        + ship_override_xml(item_usd, model, settings) + "</Item>", token)
+    for cap in [None] + US_SHIP_CAP_TRY:
+        if cap is not None:
+            cur = us_ship_cap(model)
+            if cur is not None and cap >= cur:
+                continue
+            _cap_learned[model_key(model)] = cap
+        item_usd = round(item_from_total(total_usd, model, settings), 2)
+        ack, errs = trading_call(
+            "ReviseFixedPriceItem",
+            f"<Item><ItemID>{item_id}</ItemID><StartPrice>{item_usd:.2f}</StartPrice>"
+            f"<SellerProfiles><SellerShippingProfile><ShippingProfileName>{escape(REGION_SHIP_PROFILE)}"
+            f"</ShippingProfileName></SellerShippingProfile></SellerProfiles>"
+            + ship_override_xml(item_usd, model, settings) + "</Item>", token)
+        if ack in ("Success", "Warning") or not is_ship_cap_error(errs):
+            break
     print(f"国ごとの送料に変更：{item_id} 合計${total_usd:.2f} → 商品${item_usd:.2f}＋送料",
           ship_charges(item_usd, model, settings), ack, " / ".join(errs)[:200])
     return ack, errs
@@ -2898,6 +2916,19 @@ def create_listing(r, info, detail, settings, token):
         f"<SellerShippingProfile><ShippingProfileName>{escape(ship_profile_name)}</ShippingProfileName></SellerShippingProfile>"
         "</SellerProfiles>" + ship_override + "</Item>")
     ack, errors, root = trading_call_root("AddFixedPriceItem", item, token)
+    if region_ship_on("new") and ack not in ("Success", "Warning") and is_ship_cap_error(errors):
+        for cap in US_SHIP_CAP_TRY:   # アメリカ送料の上限を超えた：下げてやり直す（超える分は商品の値段に）
+            cur = us_ship_cap(model)
+            if cur is not None and cap >= cur:
+                continue
+            _cap_learned[model_key(model)] = cap
+            p2 = round(item_from_total(price, model, settings), 2)
+            item2 = item.replace(f'<StartPrice currencyID="USD">{list_item_price:.2f}</StartPrice>',
+                                 f'<StartPrice currencyID="USD">{p2:.2f}</StartPrice>').replace(
+                ship_override, ship_override_xml(p2, model, settings))
+            ack, errors, root = trading_call_root("AddFixedPriceItem", item2, token)
+            if ack in ("Success", "Warning") or not is_ship_cap_error(errors):
+                break
     item_id = root.findtext("e:ItemID", default="", namespaces=NS)
     if ack in ("Success", "Warning") and item_id:
         return {"ebay_item_id": item_id, "price": price, "title_en": title_en}, None
