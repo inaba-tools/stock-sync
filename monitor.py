@@ -3558,6 +3558,17 @@ if __name__ == "__main__":
             tk = get_access_token()
             for iid in sys.argv[2:]:
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "sheetkeys":
+            d = sheet("list")
+            print("list のキー:", list(d.keys()))
+            print("settings:", json.dumps(d.get("settings", {}), ensure_ascii=False)[:3000])
+            for act in ("get_sheet", "read", "range", "values"):
+                try:
+                    print(act, str(sheet(act, name="設定"))[:300])
+                except SystemExit:
+                    pass
+                except Exception as e:
+                    print(act, "エラー", str(e)[:100])
         elif len(sys.argv) > 1 and sys.argv[1] == "showpolicy":
             show_policy(sys.argv[2] if len(sys.argv) > 2 else "")
         elif len(sys.argv) > 1 and sys.argv[1] == "feedbackcheck":
