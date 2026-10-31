@@ -3724,6 +3724,17 @@ if __name__ == "__main__":
             tk = get_access_token()
             for iid in sys.argv[2:]:
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "maxship":   # カテゴリごとの送料の上限
+            tk = get_access_token()
+            for cat in sys.argv[2:]:
+                ack, errs, root = trading_call_root("GetCategoryFeatures",
+                    f"<CategoryID>{cat}</CategoryID><ViewAllNodes>false</ViewAllNodes><DetailLevel>ReturnAll</DetailLevel>"
+                    "<FeatureID>MaxFlatShippingCost</FeatureID><FeatureID>MaxFlatShippingCostCBTExempt</FeatureID>", tk)
+                import xml.etree.ElementTree as ET
+                cf = root.find(".//e:Category", NS)
+                sd = root.find(".//e:SiteDefaults", NS)
+                print(cat, ack, errs, ET.tostring(cf, encoding="unicode")[:600] if cf is not None else None,
+                      "| site:", ET.tostring(sd, encoding="unicode")[:400] if sd is not None else None)
         elif len(sys.argv) > 1 and sys.argv[1] == "noopcheck":   # 値段を変えずに書き換えを試す（エラーの原因調べ）
             tk = get_access_token()
             for iid in sys.argv[2:]:

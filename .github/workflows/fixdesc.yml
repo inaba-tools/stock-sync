@@ -34,8 +34,7 @@ jobs:
 
       - name: 国ごとの送料の確認（2026/10/31）
         run: |
-          python monitor.py showpolicy 366742508340
-          python monitor.py noopcheck 366737879068
+          python monitor.py maxship 9355 139971 11724 15053 15054 15056 31387 31388
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
