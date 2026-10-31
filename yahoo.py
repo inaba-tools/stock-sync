@@ -338,7 +338,8 @@ def sale_for(M, tabs, model, color, rank, settings):
     mk = ebay_cond_market(M, model, color, settings)
     if not mk:
         return None, "相場不足"
-    return mk[RANK_LEVEL.get(rank, "安い")], f"出品中×補正の{RANK_LEVEL.get(rank, '安い')}側（{mk['件数']}件）"
+    lv = RANK_LEVEL.get(rank, "安い") if color else "安い"   # 色が分からないときは安い側（色で相場が大きく違うため）
+    return mk[lv], f"出品中×補正の{lv}側（{mk['件数']}件{'・色不明' if not color else ''}）"
 
 
 # ---------------------------------------------------------------- Gemini（無料枠のみ）
@@ -776,6 +777,10 @@ def consider(M, tabs, gem, calc, settings, it, kw, genre):
     elif not M.match_game(t, kw):
         return None
     if NOT_ITEM.search(t) or M.reserved_reason(t) or M.no_body_reason(t):
+        return None
+    # 設定シートの除外ワード（ジャンク関係の言葉は、ジャンクを別に判定するので除く）
+    ex = [w.strip() for w in re.split(r"[,、\n]", str(settings.get("exclude") or "")) if w.strip()]
+    if any(w in t for w in ex if not re.search(r"ジャンク|部品取り|訳あり", w)):
         return None
     # 本体のカテゴリだけ（ケース・フィルムなどの「新品・1,000円」が候補に入らないように）
     cat = it.get("cat") or ""
