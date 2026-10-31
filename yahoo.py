@@ -30,6 +30,7 @@ RANKMKT = "状態別相場"
 HEADERS = {"User-Agent": "stock-sync/1.0 (+https://github.com/inaba-tools/stock-sync)"}
 DUTY = 12.5
 ACTIVE = ("検討中", "入札中", "上回られた")
+MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多くなりすぎないように）
 COL = {k: i for i, k in enumerate(["状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
                                    "入札数", "終了日時", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
                                    "メモ", "最終更新", "ID"], start=1)}
@@ -165,6 +166,7 @@ def y_search(keyword, page=1):
                 "bids": int(it.get("bidCount") or 0), "end": it.get("endTime") or "", "ship": ship,
                 "cond": it.get("itemCondition") or "", "seller": (it.get("seller") or {}).get("userId") or "",
                 "store": bool((it.get("seller") or {}).get("isStore")), "image": it.get("imageUrl") or "",
+                "cat": " > ".join(str(c.get("name") or "") for c in (it.get("categoryPath") or []) if isinstance(c, dict)),
             })
         except (KeyError, TypeError, ValueError):
             continue
@@ -618,6 +620,8 @@ def run(M, data, mode="discover"):
             time.sleep(1.5)
             for it in items:
                 found_in_search[it["id"]] = it
+                if len(new_rows) >= MAX_NEW:
+                    continue
                 if it["id"] in known or any(it["id"] == r[1] for r in new_rows):
                     continue
                 cand = consider(M, tabs, gem, calc, settings, it, kw, genre)
@@ -773,6 +777,19 @@ def consider(M, tabs, gem, calc, settings, it, kw, genre):
         return None
     if NOT_ITEM.search(t) or M.reserved_reason(t) or M.no_body_reason(t):
         return None
+    # 本体のカテゴリだけ（ケース・フィルムなどの「新品・1,000円」が候補に入らないように）
+    cat = it.get("cat") or ""
+    if genre == "ガラケー" and "携帯電話本体" not in cat:
+        return None
+    if genre == "ゲーム機" and re.search(r"ソフト|周辺機器|アクセサリ|ケース|カバー|バッテリー|充電器|攻略", cat):
+        return None
+    # オークションは終了まで2日以内のものだけ（始まったばかりの1円などは値段の意味がない）。即決はいつでも
+    if not it["fixed"]:
+        try:
+            if (datetime.fromisoformat(it["end"]) - datetime.now(JST)).total_seconds() > 48 * 3600:
+                return None
+        except ValueError:
+            return None
     if M.looks_like_accessory(t) and not any(w in t for w in M.BODY_WORDS):
         return None
     color = color_of(t)
