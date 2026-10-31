@@ -1925,7 +1925,7 @@ WATCH_STEP_USD = 2.0        # ウォッチされている商品は $2（約300�
 WATCH_INTERVAL_H = 3        # 値下げの間隔（時間）（2026/10/22 1時間→3時間）
 
 
-REGION_SHIP_MODE = "off"     # "off"：今まで通り／"test"：REGION_SHIP_TEST_IDS の出品だけ／"all"：全部（新規出品も）
+REGION_SHIP_MODE = "all"     # "off"：今まで通り／"test"：REGION_SHIP_TEST_IDS の出品だけ／"all"：全部（新規出品も）
 REGION_SHIP_TEST_IDS = set()
 
 
