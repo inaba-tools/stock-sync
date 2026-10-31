@@ -3463,6 +3463,27 @@ def trim():
     sheet("log", message=msg)
 
 
+def show_policy(item_id=""):
+    """配送ポリシーの中身と、出品1件の送料設定を表示する（読み取りだけ）"""
+    base = "https://api.ebay.com/sell/account/v1/fulfillment_policy"
+    token = get_access_token()
+    h = {"Authorization": f"Bearer {token}", "Content-Language": "en-US", "Accept-Language": "en-US"}
+    r = requests.get(base, params={"marketplace_id": "EBAY_US"}, headers=h, timeout=30)
+    print("ポリシー:", r.status_code)
+    for x in r.json().get("fulfillmentPolicies", []):
+        print(json.dumps(x, ensure_ascii=False))
+    if item_id:
+        ack, errs, root = trading_call_root(
+            "GetItem", f"<ItemID>{item_id}</ItemID><DetailLevel>ReturnAll</DetailLevel>", token)
+        sd = root.find(".//e:ShippingDetails", NS)
+        import xml.etree.ElementTree as ET
+        print("出品の送料設定:", ET.tostring(sd, encoding="unicode")[:4000] if sd is not None else None)
+        sp = root.find(".//e:SellerProfiles", NS)
+        print("出品のポリシー:", ET.tostring(sp, encoding="unicode")[:1500] if sp is not None else None)
+        for tag in ("ShipToLocations", "Location", "Country", "Site"):
+            print(tag, [e.text for e in root.iter("{urn:ebay:apis:eBLBaseComponents}" + tag)][:20])
+
+
 def exclude_japan():
     """配送ポリシーの発送先から日本を除外する（画面では地域単位でしか選べないため、APIで国単位に設定）"""
     settings = sheet("list").get("settings", {})
@@ -3537,6 +3558,8 @@ if __name__ == "__main__":
             tk = get_access_token()
             for iid in sys.argv[2:]:
                 print("出品の終了:", iid, stop_on_ebay(iid, tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "showpolicy":
+            show_policy(sys.argv[2] if len(sys.argv) > 2 else "")
         elif len(sys.argv) > 1 and sys.argv[1] == "feedbackcheck":
             feedbackcheck()
         elif len(sys.argv) > 1 and sys.argv[1] == "thanks":
