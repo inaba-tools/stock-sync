@@ -3735,6 +3735,27 @@ if __name__ == "__main__":
                 sd = root.find(".//e:SiteDefaults", NS)
                 print(cat, ack, errs, ET.tostring(cf, encoding="unicode")[:600] if cf is not None else None,
                       "| site:", ET.tostring(sd, encoding="unicode")[:400] if sd is not None else None)
+        elif len(sys.argv) > 1 and sys.argv[1] == "shiplimit":   # 送料の上限を試す（試したあと元の送料無料・値段に戻す）
+            tk = get_access_token()
+            iid = sys.argv[2]
+            a = ebay_active_items(tk).get(iid, {})
+            orig = a["price"]
+            for us in [float(x) for x in sys.argv[3:]]:
+                body = (f"<Item><ItemID>{iid}</ItemID><StartPrice>{orig:.2f}</StartPrice>"
+                        f"<SellerProfiles><SellerShippingProfile><ShippingProfileName>{REGION_SHIP_PROFILE}"
+                        "</ShippingProfileName></SellerShippingProfile></SellerProfiles>"
+                        "<ShippingServiceCostOverrideList>"
+                        "<ShippingServiceCostOverride><ShippingServicePriority>1</ShippingServicePriority>"
+                        f'<ShippingServiceType>Domestic</ShippingServiceType><ShippingServiceCost currencyID="USD">{us:.2f}</ShippingServiceCost></ShippingServiceCostOverride>'
+                        + "".join("<ShippingServiceCostOverride>"
+                                  f"<ShippingServicePriority>{k}</ShippingServicePriority><ShippingServiceType>International</ShippingServiceType>"
+                                  f'<ShippingServiceCost currencyID="USD">{c:.2f}</ShippingServiceCost></ShippingServiceCostOverride>'
+                                  for k, c in [(1, 20), (2, 20), (3, 20), (4, 20)])
+                        + "</ShippingServiceCostOverrideList></Item>")
+                print("アメリカ送料", us, trading_call("ReviseFixedPriceItem", body, tk))
+            back = (f"<Item><ItemID>{iid}</ItemID><StartPrice>{orig:.2f}</StartPrice><SellerProfiles><SellerShippingProfile>"
+                    f"<ShippingProfileName>Keitai SpeedPAK Free Shipping</ShippingProfileName></SellerShippingProfile></SellerProfiles></Item>")
+            print("元に戻す", trading_call("ReviseFixedPriceItem", back, tk), ebay_active_items(tk).get(iid))
         elif len(sys.argv) > 1 and sys.argv[1] == "noopcheck":   # 値段を変えずに書き換えを試す（エラーの原因調べ）
             tk = get_access_token()
             for iid in sys.argv[2:]:
