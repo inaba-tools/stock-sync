@@ -1231,6 +1231,13 @@ def main():
         _main()
     finally:
         save_imghash()
+    # 2026/11/01 ヤフオクの終了2時間前の行だけ更新（上回られた・終了30分前のメール）＋出品中の商品のAI確認（余った回数で）
+    try:
+        import yahoo
+        yahoo.run(sys.modules[__name__], {"settings": {}}, "soon")
+        yahoo.check_active_listings(sys.modules[__name__])
+    except Exception as e:
+        print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
 
 
 def _main():
@@ -1468,6 +1475,13 @@ def _main():
                             v = views.get(r["ebay_item_id"])
                             upd["reason"] = unsold_reason(act["days"], v[0] if v else None, act.get("watch"),
                                                           act.get("price"), target, q)
+                            try:   # 2026/11/01 AIで見た状態ランクも売れない理由に入れる（キーが無ければ何もしない）
+                                import yahoo
+                                rk = yahoo.ai_rank(sys.modules[__name__], r["ebay_item_id"])
+                                if rk:
+                                    upd["reason"] = f"{upd['reason']} / 状態{rk}（AI）"
+                            except Exception:
+                                pass
                         hours_since_drop = None   # 前回の値下げからの時間（T列「最終値下げ」から読む）
                         try:
                             last = datetime.strptime(str(r.get("last_drop") or "")[:16], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
@@ -1552,7 +1566,19 @@ def _main():
                             res, err = None, (f"SKIP:同じ商品を{source_name(other['url'])}（{int(other['price'] or 0):,}円）で"
                                               f"出品中のため候補から外しました（eBay {other['ebay_item_id']}）")
                         else:
-                            res, err = create_listing(r, info, detail, settings, token)
+                            gate = None
+                            try:   # 2026/11/01 出品の直前にAI（Gemini無料枠）で写真と説明文を確認。キーが無ければ今まで通り
+                                import yahoo
+                                gate = yahoo.listing_gate(sys.modules[__name__], r, info, detail)
+                            except Exception as e:
+                                print("AIの確認でエラー（確認なしで続行はせず、次の回に）:", type(e).__name__)
+                                gate = ("WAIT", "AIの確認でエラー")
+                            if gate and gate[0] == "SKIP":
+                                res, err = None, "SKIP:" + gate[1]
+                            elif gate:
+                                res, err = None, "AIWAIT"
+                            else:
+                                res, err = create_listing(r, info, detail, settings, token)
                     except Exception as e:
                         res, err = None, f"出品中にエラー：{str(e)[:200]}"
                         if TEMP_EBAY_ERR.search(str(e)):
@@ -1579,6 +1605,8 @@ def _main():
                         upd["result"] = f"【待機】eBayが一時的に受け付けないため、次の回に出品します（{err[7:120]}）"
                     elif err == "LIMITWAIT":
                         upd["result"] = "【待機】eBayの相場の問い合わせ上限に達したため、次の回に出品します"
+                    elif err == "AIWAIT":
+                        upd["result"] = "【待機】AIの確認の今日の回数を使い切ったため、確認できしだい出品します（翌日）"
                     elif err == "DAYWAIT":
                         upd["result"] = f"【待機】今日の出品ペースの上限（{day_cap(free_used)}件）に達したため、明日以降に出品します"
                     elif err and err.startswith("SKIP:"):
@@ -3339,6 +3367,13 @@ def discover():
         sheet("append", rows=added)
         best = added[0]
         notify(f"【仕入れ候補】{len(added)}件を追加しました。最高：{best['title'][:30]} 想定利益 {best['profit']:,}円（{best['margin']}%）")
+    if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 ヤフオク仕入れ（1本目だけ。失敗しても候補さがしは止めない）
+        try:
+            import yahoo
+            yahoo.run(sys.modules[__name__], data, "discover")
+            yahoo.weekly_rank_market(sys.modules[__name__], data)
+        except Exception as e:
+            print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
     msg = (f"{now()} {'【全部見る回】' if FULL_SCAN else ''}候補さがし：メルカリ{pages_seen[0]}ページ・{len(seen)}件を確認、{checked}件を計算、条件に合う{len(found)}件のうち{len(added)}件を追加"
            f"（{(time.time() - t0) / 60:.0f}分・相場は{_market_stats['hit']}件を使い回し、{_market_stats['miss']}件を新しく取得）")
     print(msg)

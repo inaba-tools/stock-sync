@@ -58,6 +58,7 @@ jobs:
           SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
           SHEET_API_KEY: ${{ secrets.SHEET_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # 無料枠のみ。未登録なら空（AIの確認はキー待ち）
       - name: 自動実行が60日で止まらないようにする
         if: always()
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/discover.yml/enable"
