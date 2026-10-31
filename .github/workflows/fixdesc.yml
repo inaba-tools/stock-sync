@@ -34,7 +34,7 @@ jobs:
 
       - name: 国ごとの送料の確認（2026/10/31）
         run: |
-          python monitor.py shiplimit 366737879068 26/20 27/20 28/20 29/20 25/30 25/40 25/55 25/75
+          python monitor.py regiontest 366737879068
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}

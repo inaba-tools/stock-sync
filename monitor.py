@@ -1098,29 +1098,49 @@ def fee_rate(settings, model=""):
     return (float(settings.get("fee_pct") or 15) + float(settings.get("other_pct") or 2) + ad_pct(model)) / 100
 
 
+# eBayの決まりで、携帯電話のカテゴリはアメリカ向けの送料が$25まで（2026/10/31 試して確認。国際送料は上限なし）。
+# 上限を超える分は商品の値段に入れる（アメリカの人の合計と利益は変わらない）
+US_SHIP_CAP_PHONE = 25.0
+
+
+def us_ship_cap(model):
+    return None if game_info(model or "") else US_SHIP_CAP_PHONE
+
+
 def item_from_total(total_usd, model, settings):
     """アメリカの人が払う合計（商品＋送料）→ 商品の値段"""
     fx, F, d = usd_jpy(settings), fee_rate(settings, model), duty_pct(settings) / 100
-    return (float(total_usd) - ship_for(settings, model) / fx / (1 - F)) / (1 + d / (1 - F))
+    T = float(total_usd)
+    item = (T - ship_for(settings, model) / fx / (1 - F)) / (1 + d / (1 - F))
+    cap = us_ship_cap(model)
+    if cap is not None and T - item > cap:
+        item = T - cap
+    return item
 
 
 def ship_charges(item_usd, model, settings):
-    """国ごとに受け取る送料（ドル）。アメリカは関税（商品の値段×関税率）も含める"""
+    """国ごとに受け取る送料（ドル）。どの国に売れても利益が同じになる金額（アメリカは関税込み）"""
     fx, F, d = usd_jpy(settings), fee_rate(settings, model), duty_pct(settings) / 100
-    out = {}
-    for name, _ in SHIP_REGIONS:
-        jpy = ship_for(settings, model, name) + (d * float(item_usd) * fx if name == "US" else 0)
-        out[name] = round(jpy / fx / (1 - F), 2)
+    P = float(item_usd)
+    us = (ship_for(settings, model) + d * P * fx) / (1 - F) / fx
+    cap = us_ship_cap(model)
+    if cap is not None:
+        us = min(us, cap)
+    T = P + us
+    K = T * (1 - F) * fx - ship_for(settings, model) - d * P * fx     # 仕入れ値＋利益にあたる金額（円）
+    out = {"US": round(us, 2)}
+    for name, _ in SHIP_REGIONS[1:]:
+        out[name] = round(max(0.0, (K + ship_for(settings, model, name)) / ((1 - F) * fx) - P), 2)
     return out
 
 
 def profit_from_total(total_usd, cost_jpy, model, settings):
     """アメリカの人に合計 total_usd で売れたときの利益（円）。どの国に売れても利益は同じになる"""
+    F, d, fx = fee_rate(settings, model), duty_pct(settings) / 100, usd_jpy(settings)
     if REGION_SHIP_MODE != "all":   # 切り替え前：送料無料・関税は合計にかかる（今まで通り）
-        F = fee_rate(settings, model) + duty_pct(settings) / 100
-        return float(total_usd) * usd_jpy(settings) * (1 - F) - ship_for(settings, model) - float(cost_jpy)
+        return float(total_usd) * fx * (1 - F - d) - ship_for(settings, model) - float(cost_jpy)
     item = item_from_total(total_usd, model, settings)
-    return item * (1 - fee_rate(settings, model)) * usd_jpy(settings) - float(cost_jpy)
+    return float(total_usd) * (1 - F) * fx - ship_for(settings, model) - d * item * fx - float(cost_jpy)
 
 
 def profit(cost_jpy, sale_usd, settings, model=""):
@@ -1954,6 +1974,9 @@ def floor_price_usd(cost, query, settings, profit=None):
         return math.ceil((float(cost) + ship_for(settings, query) + min_profit) / max(0.05, 1 - F - d) / fx) - 0.01
     item = (float(cost) + min_profit) / (1 - F) / fx
     total = item + (ship_for(settings, query) / fx + d * item) / (1 - F)
+    cap = us_ship_cap(query)
+    if cap is not None and total - item > cap:   # 携帯電話：アメリカ送料は$25まで、残りは商品の値段に
+        total = (float(cost) + min_profit + ship_for(settings, query) - d * cap * fx) / ((1 - F - d) * fx)
     return math.ceil(total) - 0.01
 
 
