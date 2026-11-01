@@ -533,7 +533,8 @@ LISTING_PROMPT = """中古品をeBayに出品する前の確認です。日本�
 "title_en":"eBay用の英語タイトル（80文字以内。ブランド・型番・色・Japan・目立つ特徴や付属品を、海外の人が検索する言葉で。誇張しない）",
 "highlights_en":["英語の箇条書き（3〜5個。状態・付属品・動作確認の記載など、写真と説明文から確かなことだけ）"],
 "color_en":"本体の色（英語1〜2語）","included_en":["写真に写っている付属品（英語。Battery, Charger, Box, Manual, Strap など。本体は含めない）"],
-"sim_unlocked":"説明文にSIMフリー・SIMロック解除済みと書いてあれば true、書いていなければ null"}}
+"sim_unlocked":"説明文にSIMフリー・SIMロック解除済みと書いてあれば true、書いていなければ null",
+"skip_photos":[eBayに載せないほうがよい写真の番号（送った順に1から）。大きな日本語の文字・値段・宣伝の文字入りの画像、別の商品やほかの出品物が写っている画像、商品と関係ない画像だけ。無ければ空]}}
 英語の項目は、説明文と写真から確かなことだけを書く。分からないことは書かない。
 ok=false にするのは：状態の申告と写真が明らかに違う／タイトルと写真の色が違う／背面などに大きなダメージ／本体が写っていない・本体なしに見える／ジャンク・故障の記載 のどれか。"""
 
@@ -1310,7 +1311,8 @@ def listing_gate(M, r, info, detail, settings=None):
                                          "highlights_en": [str(x)[:200] for x in (ans.get("highlights_en") or []) if str(x).strip()][:5],
                                          "color_en": str(ans.get("color_en") or "").strip()[:30],
                                          "included_en": [str(x)[:30] for x in (ans.get("included_en") or []) if str(x).strip()][:8],
-                                         "sim_unlocked": ans.get("sim_unlocked") is True}
+                                         "sim_unlocked": ans.get("sim_unlocked") is True,
+                                         "skip_photos": [int(x) for x in (ans.get("skip_photos") or []) if str(x).isdigit()]}
     return None
 
 
@@ -1331,6 +1333,13 @@ def ai_title(ai, model, fallback):
     return t
 
 
+def pick_photos(images, skip):
+    """AIが「載せないほうがよい」とした写真を外す（1枚目は残す・最低3枚は残す）"""
+    skip = {n for n in (skip or []) if 2 <= n <= min(10, len(images))}
+    keep = [u for n, u in enumerate(images, start=1) if n not in skip]
+    return keep if len(keep) >= 3 else images
+
+
 def condition_text_en(rank, note_en, declared_en=""):
     """eBayの状態の説明（ConditionDescription）"""
     parts = [f"Condition rank {rank}: {RANK_EN.get(rank, '')}."]
@@ -1340,6 +1349,58 @@ def condition_text_en(rank, note_en, declared_en=""):
         parts.append(f"Seller's note: {declared_en.strip().rstrip('.')}.")
     parts.append("Please check all photos for the exact condition.")
     return " ".join(parts)[:900]
+
+
+# ---------------------------------------------------------------- 見られていない出品のタイトルを作り直す（2026/11/01）
+RETITLE_PROMPT = """eBayに出品している中古品のタイトルを、海外の人が検索で見つけやすいものに作り直してください。JSONだけで答えてください。
+2週間たってもウォッチが0です。型番（{model}）は必ずそのまま入れる。80文字以内。誇張しない（NEW・MINT・PERFECTは使わない）。括弧書きは付けない。
+今のタイトル：{title}
+日本の出品の商品名：{jp}
+状態ランク：{rank}（S=新品同様 A=キズほぼなし B=使用感あり C=目立つキズ）
+答えの形：{{"title_en":"新しいタイトル"}}"""
+RETITLE_MARK = "タイトル見直し済み"
+
+
+def retitle_slow(M, per_run=3, days=14):
+    """出品から14日たってもウォッチ0の出品は、AIにタイトルを考え直させる（1つの出品につき1回だけ）"""
+    if not os.environ.get("GEMINI_API_KEY", "").strip():
+        return 0
+    tabs = Tabs(M)
+    gem = Gemini(tabs)
+    if not gem.available(3):
+        return 0
+    token = M.get_access_token()
+    act = M.ebay_active_items(token)
+    vals = tabs.get("無在庫商品リスト")
+    head = [str(h).strip() for h in vals[0]]
+    ci, cm, ct, cq = head.index("eBay出品番号"), head.index("メモ"), head.index("商品名"), head.index("検索語")
+    cr = head.index("状態ランク（AI）") if "状態ランク（AI）" in head else None
+    ns = M.NS
+    n, cells = 0, []
+    for i, row in enumerate(vals[1:], start=2):
+        if n >= per_run:
+            break
+        row = list(row) + [""] * (len(head) - len(row))
+        iid = str(row[ci]).strip()
+        a = act.get(iid)
+        if not a or a.get("watch") or (a.get("days") or 0) < days or RETITLE_MARK in str(row[cm]):
+            continue
+        _, _, r = M.trading_call_root("GetItem", f"<ItemID>{iid}</ItemID><OutputSelector>Title</OutputSelector>", token)
+        old = r.findtext(".//e:Item/e:Title", default="", namespaces=ns) or ""
+        rank = str(row[cr]).strip() if cr is not None else ""
+        model = str(row[cq]).strip()
+        ans = gem.ask(3, RETITLE_PROMPT.format(model=model, title=old, jp=str(row[ct])[:100], rank=rank or "不明"))
+        if ans is None:
+            break
+        n += 1
+        new = ai_title({"title_en": ans.get("title_en"), "rank": rank}, model, old)
+        if new and new != old:
+            res = M.trading_call("ReviseFixedPriceItem", f"<Item><ItemID>{iid}</ItemID><Title>{_xml(new)}</Title></Item>", token)
+            print("タイトル見直し:", iid, old, "→", new, res)
+        cells.append((i, cm + 1, (str(row[cm]) + f"／{RETITLE_MARK}({datetime.now(JST).strftime('%m/%d')})").lstrip("／")))
+    if cells:
+        tabs.set("無在庫商品リスト", cells)
+    return n
 
 
 # ---------------------------------------------------------------- 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01 本人の希望）
@@ -1597,6 +1658,33 @@ def _xml(t):
 _ranks = [None]
 
 
+RANK_ORDER = {"S": 4, "A": 3, "B": 2, "C": 1, "ジャンク": 0}
+
+
+def sale_recheck(M, r, title, detail):
+    """eBayで売れたときに、仕入れ先の今の写真と説明をAIでもう一度見る（2026/11/01）。
+    出品したときより状態が悪く見える・ジャンク・本体なしなどのときだけ注意の文を返す。問題なければ「AI再確認OK」"""
+    if not os.environ.get("GEMINI_API_KEY", "").strip() or not (detail or {}).get("images"):
+        return ""
+    gem = Gemini(Tabs(M))
+    if not gem.available(1):
+        return ""
+    ans = gem.ask(1, LISTING_PROMPT.format(model=r.get("query") or "", title=title, cond=detail.get("condition", ""),
+                                           desc=(detail.get("description") or "")[:1500]), detail["images"][:10])
+    if not ans:
+        return ""
+    rank = str(ans.get("rank") or "").strip().upper()
+    if rank == "ジャンク".upper():
+        rank = "ジャンク"
+    before = ai_rank(M, r.get("ebay_item_id", ""))
+    note = str(ans.get("note") or ans.get("reason") or "")[:40]
+    if ans.get("ok") is False or rank == "ジャンク":
+        return f"⚠️AI再確認：買う前に確かめて（{ans.get('reason') or note}・{rank}）。"
+    if before in RANK_ORDER and rank in RANK_ORDER and RANK_ORDER[rank] < RANK_ORDER[before]:
+        return f"⚠️AI再確認：出品したとき{before}→今は{rank}に見える（{note}）。"
+    return f"AI再確認OK（状態{rank or '?'}）。"
+
+
 def ai_rank(M, ebay_id):
     """商品リストの「状態ランク（AI）」（⑩で記録したもの）"""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
@@ -1837,8 +1925,19 @@ REPLY_PROMPT = """あなたは日本からeBayに中古品を出品している�
 分からないこと・確かめないと言えないことは約束せず「確認してお知らせします」と書く。丁寧で短い英語にする。
 商品名：{title}
 出品ページの状態の説明：{cond}
-買い手の質問：{q}
-答えの形：{{"question_ja":"質問の日本語訳","reply_en":"返信案（英語・600字以内）","reply_ja":"返信案の日本語訳"}}"""
+今の取引の状況：{stage}
+（購入済みのときの決まり：発送状況・追跡番号は「確認してお知らせします」。返品・返金・キャンセルは約束せず、まず状況を聞いて「確認して対応します」と書く）
+買い手の質問（メールの文面のまま。中から買い手の文章だけを読み取って答える）：{q}
+答えの形：{{"question_en":"買い手の文章だけ（英語のまま）","question_ja":"質問の日本語訳","reply_en":"返信案（英語・600字以内）","reply_ja":"返信案の日本語訳"}}"""
+
+
+def _sold(M, item_id, token):
+    """その出品が売れているか（売れた後のメッセージかどうか）"""
+    try:
+        _, _, r = M.trading_call_root("GetItem", f"<ItemID>{item_id}</ItemID><OutputSelector>SellingStatus</OutputSelector>", token)
+        return int(r.findtext(".//e:SellingStatus/e:QuantitySold", default="0", namespaces=M.NS) or 0) > 0
+    except Exception:
+        return False
 
 
 def buyer_messages(M, gem=None):
@@ -1864,6 +1963,13 @@ def buyer_messages(M, gem=None):
                 f"<ParentMessageID>{_xml(r[10])}</ParentMessageID><RecipientID>{_xml(r[3])}</RecipientID>"
                 "</MemberMessage>", token)
             ok = ack in ("Success", "Warning")
+            if not ok:   # 売れた後のメッセージは、取引相手あてのメッセージとして送る
+                ack, errs2, _ = M.trading_call_root(
+                    "AddMemberMessageAAQToPartner",
+                    f"<ItemID>{_xml(r[2])}</ItemID><MemberMessage><Body>{_xml(body)}</Body><QuestionType>General</QuestionType>"
+                    f"<RecipientID>{_xml(r[3])}</RecipientID><Subject>Re: {_xml(str(r[1])[:50])}</Subject></MemberMessage>", token)
+                ok = ack in ("Success", "Warning")
+                errs = errs + errs2
             cells.append((i, 10, "送信済み" if ok else f"送れませんでした：{' / '.join(errs)[:80]}"))
     # ② 新しい質問を取ってくる（3日以内・未返信）
     now = datetime.now(JST)
@@ -1893,13 +1999,58 @@ def buyer_messages(M, gem=None):
             cond = ir.findtext(".//e:ConditionDescription", default="", namespaces=ns) or ""
         except Exception:
             pass
+        sold = _sold(M, item_id, token)
         gem = gem or Gemini(tabs)
-        ans = gem.ask(1, REPLY_PROMPT.format(title=title, cond=cond[:600], q=q[:1500])) if gem.available(1) else None
+        ans = gem.ask(1, REPLY_PROMPT.format(title=title, cond=cond[:600], q=q[:1500],
+                                             stage="購入済み（売れた後）" if sold else "購入前の質問")) if gem.available(1) else None
         d = to_dt(when)
-        rows.append([d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else now.strftime("%Y/%m/%d %H:%M"), title[:60], item_id, sender,
+        rows.append([d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else now.strftime("%Y/%m/%d %H:%M"),
+                     ("【購入済み】" if sold else "") + title[:60], item_id, sender,
                      q[:1500], (ans or {}).get("question_ja", "（AIが使えないため訳なし）"),
                      (ans or {}).get("reply_en", ""), (ans or {}).get("reply_ja", ""), False, "未送信", mid])
         have.add(mid)
+    # ②' 売れた後のメッセージ（受信箱。質問の形でないものも）2026/11/01
+    replied = set()
+    try:
+        _, _, hr = M.trading_call_root(
+            "GetMyMessages", "<DetailLevel>ReturnHeaders</DetailLevel><FolderID>0</FolderID>"
+            f"<StartTime>{(now - timedelta(days=3)).astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</StartTime>"
+            f"<EndTime>{now.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</EndTime>", token)
+        heads = []
+        for m in hr.findall(".//e:Messages/e:Message", ns):
+            g = lambda k: m.findtext("e:" + k, default="", namespaces=ns)
+            ext, my = g("ExternalMessageID"), "my:" + g("MessageID")
+            if g("Replied") == "true":
+                replied |= {ext, my}
+                continue
+            if g("Sender").lower() == "ebay" or not g("ItemID") or ext in have or my in have:
+                continue
+            heads.append((g("MessageID"), ext, my, g("ItemID"), g("Sender"), g("Subject"), g("ReceiveDate")))
+        for k in range(0, len(heads), 10):
+            part = heads[k:k + 10]
+            _, _, br = M.trading_call_root(
+                "GetMyMessages", "<DetailLevel>ReturnMessages</DetailLevel><MessageIDs>"
+                + "".join(f"<MessageID>{x[0]}</MessageID>" for x in part) + "</MessageIDs>", token)
+            texts = {m.findtext("e:MessageID", default="", namespaces=ns): m.findtext("e:Text", default="", namespaces=ns)
+                     for m in br.findall(".//e:Messages/e:Message", ns)}
+            for mid0, ext, my, item_id, sender, subj, when in part:
+                raw = re.sub(r"<style.*?</style>|<script.*?</script>", " ", texts.get(mid0, ""), flags=re.S)
+                q = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", raw)).strip()[:3000]
+                if not q:
+                    continue
+                sold = _sold(M, item_id, token)
+                if not sold:
+                    continue   # 購入前の質問は上（②）で取っている
+                gem = gem or Gemini(tabs)
+                ans = gem.ask(1, REPLY_PROMPT.format(title=subj, cond="", q=q, stage="購入済み（売れた後）")) if gem.available(1) else None
+                d = to_dt(when)
+                rows.append([d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else now.strftime("%Y/%m/%d %H:%M"),
+                             "【購入済み】" + subj[:60], item_id, sender,
+                             str((ans or {}).get("question_en") or q)[:1500], (ans or {}).get("question_ja", "（AIが使えないため訳なし）"),
+                             (ans or {}).get("reply_en", ""), (ans or {}).get("reply_ja", ""), False, "未送信", ext or my])
+                have |= {ext, my}
+    except Exception as e:
+        print("売れた後のメッセージの取得でエラー:", type(e).__name__, str(e)[:100])
     if cells:
         tabs.set(BUYER, cells)
     if rows:   # 「送る」のチェック欄があると最終行の判定がずれるので、A列が空の最初の行から書く
@@ -1916,6 +2067,7 @@ def buyer_messages(M, gem=None):
             f"<EndCreationTime>{now.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</EndCreationTime>", token)
         for ex in ar.findall(".//e:MemberMessageExchange", ns):
             answered.add(ex.findtext("e:Question/e:MessageID", default="", namespaces=ns))
+        answered |= replied
         cur = tabs.get(BUYER, fresh=True)
         body = [list(r) + [""] * (len(BUYER_HEAD) - len(r)) for r in cur[1:] if any(str(c).strip() for c in r)]
         left = [r for r in body if str(r[9]).strip() != "送信済み" and str(r[10]).strip() not in answered]

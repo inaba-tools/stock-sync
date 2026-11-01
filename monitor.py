@@ -1263,6 +1263,11 @@ def main():
         yahoo.buyer_messages(sys.modules[__name__])   # 2026/11/01 買い手の質問の日本語訳と返信案（チェックで送信）
     except Exception as e:
         print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
+    try:   # 2026/11/01 14日たってもウォッチ0の出品のタイトルをAIで見直す（1件1回）
+        import yahoo
+        yahoo.retitle_slow(sys.modules[__name__])
+    except Exception as e:
+        print("タイトル見直しでエラー:", type(e).__name__, str(e)[:150])
 
 
 def _main():
@@ -1447,9 +1452,24 @@ def _main():
                         p = profit_from_total(s["usd"], info["price"], r.get("query"), settings)
                         p_txt = f"・見込み利益 約{int(p):,}円"
                         upd["profit"] = round(p)
+                    warn = ""
+                    try:   # 2026/11/01 出品したときから値上がりしていないか・赤字にならないか
+                        old_cost = float(str(r.get("cost") or 0).replace(",", "") or 0)
+                        if old_cost and info["price"] > old_cost:
+                            warn += f"⚠️仕入れ値が{int(old_cost):,}円→{int(info['price']):,}円に値上がり。"
+                        if upd.get("profit") is not None and upd["profit"] < 0:
+                            warn += f"⚠️今の値段だと赤字（{int(upd['profit']):,}円）。"
+                    except Exception:
+                        pass
+                    try:   # 2026/11/01 今の写真と説明をAIでもう一度見る（写真が変わっていないか・ジャンクになっていないか）
+                        import yahoo as ymod   # この関数の中の yahoo は「ヤフーの出品か」の印なので別の名前で読む
+                        det_s = ydetail if yahoo else page.evaluate(DETAIL_JS)
+                        warn += ymod.sale_recheck(sys.modules[__name__], r, title_now, det_s)
+                    except Exception as e:
+                        print("売れたときのAI確認でエラー:", type(e).__name__, str(e)[:80])
                     upd["cost"] = info["price"]
                     upd["result"] = (f"🔴【要購入】eBayで売れました（{usd}）。{src}でまだ買えます"
-                                     f"（{int(info['price']):,}円{p_txt}）→ 商品URLから購入してください")
+                                     f"（{int(info['price']):,}円{p_txt}）→ 商品URLから購入してください" + (f"\n{warn}" if warn else ""))
                 else:
                     # 仕入れ元が売り切れ：代わりの商品は使わず、購入者にお詫びしてキャンセルする
                     upd["result"] = (f"⚠️【確認】【仕入れ先が売り切れ】eBayで売れました（{usd}）が、{src}はすでに{LABEL[status]}です。"
@@ -1502,8 +1522,8 @@ def _main():
                             upd["reason"] = unsold_reason(act["days"], v[0] if v else None, act.get("watch"),
                                                           act.get("price"), target, q)
                             try:   # 2026/11/01 AIで見た状態ランクも売れない理由に入れる（キーが無ければ何もしない）
-                                import yahoo
-                                rk = yahoo.ai_rank(sys.modules[__name__], r["ebay_item_id"])
+                                import yahoo as ymod
+                                rk = ymod.ai_rank(sys.modules[__name__], r["ebay_item_id"])
                                 if rk:
                                     upd["reason"] = f"{upd['reason']} / 状態{rk}（AI）"
                             except Exception:
@@ -1594,8 +1614,8 @@ def _main():
                         else:
                             gate = None
                             try:   # 2026/11/01 出品の直前にAI（Gemini無料枠）で写真と説明文を確認。キーが無ければ今まで通り
-                                import yahoo
-                                gate = yahoo.listing_gate(sys.modules[__name__], r, info, detail, settings)
+                                import yahoo as ymod
+                                gate = ymod.listing_gate(sys.modules[__name__], r, info, detail, settings)
                             except Exception as e:
                                 print("AIの確認でエラー（確認なしで続行はせず、次の回に）:", type(e).__name__)
                                 gate = ("WAIT", "AIの確認でエラー")
@@ -2937,7 +2957,17 @@ def create_listing(r, info, detail, settings, token):
     if target < floor_price_usd(cost, model, settings, min_profit_for(cost, settings, model)):
         return None, f"SKIP:相場(${target:.2f})では利益{int(min_profit_for(cost, settings, model)):,}円が残らないため出品しません"
     price = item_floor(cost, model, settings, target)   # 利益2,000円の値段。相場がそれより安ければ相場の値段（最低利益は残す）
-    pics = upload_pictures(detail.get("images", []), token)
+    imgs = detail.get("images", [])
+    if ai.get("skip_photos"):   # 2026/11/01 AIが選んだ、載せないほうがよい写真（文字入り・ほかの商品）を外す
+        try:
+            import yahoo
+            imgs2 = yahoo.pick_photos(imgs, ai["skip_photos"])
+            if len(imgs2) < len(imgs):
+                print("載せない写真:", sorted(ai["skip_photos"]))
+            imgs = imgs2
+        except Exception:
+            pass
+    pics = upload_pictures(imgs, token)
     if not pics:
         return None, "写真をeBayに取り込めなかったため出品を中止しました（もう一度チェックすると再挑戦します）"
 
