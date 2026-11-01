@@ -26,7 +26,8 @@ PT = ZoneInfo("America/Los_Angeles")   # Gemini の1日の回数は太平洋時�
 TAB = "ヤフオク入札"
 ARCHIVE = "ヤフオク履歴"   # 終了・見送り・負けの行の置き場（同じ出品をもう一度候補にしないために残す）
 DONE = ("終了", "見送り", "負け")
-DEVICES = "端末管理"
+HAND = ("落札", "購入済み")   # 手元在庫シートに記録したら、ヤフオク入札からは外す（2026/11/01 本人の希望）
+DEVICES = "手元在庫"   # 2026/11/01 名前を変更（旧：端末管理）。落札・購入した端末はここで管理する
 PARTS = "部品表"
 REPAIR = "修理部品表"   # 2026/11/01 機種×不具合×部品・値段・購入リンク（部品代はここの値段を使う）
 JUDGED_FILE = os.path.join(".cache", "ai_judged.json")   # AIで見た出品（1件1回だけ判定する）
@@ -841,7 +842,7 @@ def run(M, data, mode="discover", flea=None):
     if won:
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
-                + "\n\n古物台帳と端末管理に記録しました。")
+                + "\n\n古物台帳と手元在庫シートに記録しました。")
     if mode == "discover":
         try:
             tidy(tabs)
@@ -888,8 +889,8 @@ def _row_formulas(row, r):
 
 
 def tidy(tabs):
-    """終了・見送り・負けの行を「ヤフオク履歴」へ移し、残りを終了が近い順に並べ直す（1時間ごとの回の最後に1回）。
-    入札中・上回られた・検討中が上（終了が近い順、即決のフリマはその下）、落札・購入済みは一番下"""
+    """終了・見送り・負け・落札・購入済みの行を「ヤフオク履歴」へ移し、残りを終了が近い順に並べ直す（1時間ごとの回の最後に1回）。
+    落札・購入済みは手元在庫シートに記録済みのものだけ移す（無ければ記録してから）"""
     vals = tabs.get(TAB, fresh=True)
     if len(vals) < 2:
         return
@@ -897,8 +898,19 @@ def tidy(tabs):
     head = vals[0]
     rows = [list(r) + [""] * (n - len(r)) for r in vals[1:]]
     rows = [[_cell_out(v) for v in r[:n]] for r in rows if any(str(x).strip() for x in r)]
-    done = [r for r in rows if str(r[COL["状態"] - 1]).strip() in DONE]
-    keep = [r for r in rows if str(r[COL["状態"] - 1]).strip() not in DONE]
+    # 落札・購入済み：手元在庫シートに無ければ記録してから外す（シートで手で「購入済み」にした分も）
+    try:
+        dev_txt = " ".join(str(c) for r in tabs.get(DEVICES, fresh=True)[1:] for c in r[:4])
+    except Exception:
+        dev_txt = None
+    for r in rows:
+        st, aid = str(r[COL["状態"] - 1]).strip(), str(r[COL["ID"] - 1]).strip()
+        if st in HAND and aid and dev_txt is not None and aid not in dev_txt:
+            record_win(None, tabs, r, aid, num(r[COL["現在価格"] - 1]) or 0, None)
+            dev_txt += " " + aid
+    out_st = DONE + (HAND if dev_txt is not None else ())
+    done = [r for r in rows if str(r[COL["状態"] - 1]).strip() in out_st]
+    keep = [r for r in rows if str(r[COL["状態"] - 1]).strip() not in out_st]
     far = datetime(2100, 1, 1, tzinfo=JST)
 
     def key(r):
@@ -1022,16 +1034,17 @@ def record_win(M, tabs, row, aid, price, mail):
         ship = num(row[COL["送料"] - 1]) or 0
         model, color, use = row[COL["機種"] - 1], row[COL["色"] - 1], row[COL["用途"] - 1]
         today = datetime.now(JST).strftime("%Y/%m/%d")
-        tabs.append("古物台帳", [["=ROW()-5", today, "ヤフオク", aid, "携帯電話" if row[COL["ジャンル"] - 1] == "ガラケー" else "ゲーム機",
-                                f"{model} {color} {row[COL['商品の状態'] - 1]}"[:80], 1, int(price), "ヤフオク出品者",
-                                "特例" if price < 10000 else "経過措置", "", "", "✓ 落札メール", f"送料{int(ship)}円・自動記録"]])
+        src = ("メルカリ" if "mercari" in aid else "Yahoo!フリマ") if str(aid).startswith("http") else "ヤフオク"
+        tabs.append("古物台帳", [["=ROW()-5", today, src, aid, "携帯電話" if row[COL["ジャンル"] - 1] == "ガラケー" else "ゲーム機",
+                                f"{model} {color} {row[COL['商品の状態'] - 1]}"[:80], 1, int(price), f"{src}出品者",
+                                "特例" if price < 10000 else "経過措置", "", "", "✓ 落札メール" if mail else "シートで購入済み", f"送料{int(ship)}円・自動記録"]])
         dev = tabs.get(DEVICES, fresh=True)
         no = next_device_no(dev)
         state = "部品取り" if use == "部品取り" else ("修理待ち" if "修理" in str(use) else "検品待ち")
-        tabs.append(DEVICES, [[no, model, color, f"ヤフオク {aid}", today, "", int(price + ship), state, "",
+        tabs.append(DEVICES, [[no, model, color, f"{src} {aid}", today, "", int(price + ship), state, "",
                                str(row[COL["メモ"] - 1])[:80], label_text(no, model, color, state)]])
         if use == "部品取り":
-            tabs.append(PARTS, [[no, model, "（生きている部品は届いたら確認）", "", "在庫", f"ヤフオク {aid}"]])
+            tabs.append(PARTS, [[no, model, "（生きている部品は届いたら確認）", "", "在庫", f"{src} {aid}"]])
     except Exception as e:
         print("落札の記録に失敗:", str(e)[:120])
 
