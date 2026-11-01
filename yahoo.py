@@ -893,6 +893,13 @@ def run(M, data, mode="discover", flea=None):
                     new_rows.append((cand, it["id"]))
                     known.add(it["id"])
 
+    # ---- 2026/11/1 本人の希望：ピンクの902KC・903KCがヤフオクに出たら、利益やジャンクかどうかに関係なくメール（1つの出品につき1回だけ）
+    if mode == "discover":
+        try:
+            pink_mail(M, found_in_search, now_dt)
+        except Exception as e:
+            print("ピンクのお知らせでエラー:", type(e).__name__, str(e)[:100])
+
     # ---- 今ある行の更新（見送り・負け・終了・落札・購入済みは触らない）
     for i, row in enumerate(vals[1:], start=2):
         row = list(row) + [""] * (20 - len(row))
@@ -1051,6 +1058,35 @@ def run(M, data, mode="discover", flea=None):
     except Exception:
         pass
     return gem
+
+
+def pink_mail(M, found, now_dt):
+    """ピンクの902KC・903KC（ジャンクも）が出たらメール。ケース・電池などの本体以外は外す。知らせた出品は覚えておく"""
+    load_judged()
+    pinks = []
+    for it in found.values():
+        t = it.get("title") or ""
+        if not re.search(r"90[23]\s*KC|DIGNO\s*ケータイ\s*3", t, re.I) or color_of(t) != "ピンク" or NOT_ITEM.search(t):
+            continue
+        k = "pinkmail:" + it["id"]
+        if k in _judged:
+            continue
+        _judged[k] = [None, "ピンクのメール済", now_dt.strftime("%Y-%m-%d")]
+        pinks.append(it)
+    if not pinks:
+        return
+    save_judged()
+    lines = []
+    for it in pinks:
+        end = to_dt(it.get("end") or "")
+        kind = "ジャンク" if JUNK_WORD.search(it["title"]) else "通常"
+        price = f"今 {it['price']:,}円" + (f"（即決 {it['buynow']:,}円）" if it.get("buynow") else "")
+        ship = "送料無料" if it.get("ship") == 0 else (f"送料 {it['ship']:,}円" if it.get("ship") else "送料は出品ページで確認")
+        lines.append(f"・[{kind}] {it['title'][:60]}\n  {price}・{ship}・入札{it.get('bids', 0)}件"
+                     f"{'・終了 ' + end.strftime('%Y/%m/%d %H:%M') if end else ''}\n"
+                     f"  https://auctions.yahoo.co.jp/jp/auction/{it['id']}")
+    M.alert(f"【ヤフオク】ピンクの902KC・903KCが出ました（{len(pinks)}件）", "\n\n".join(lines)
+            + "\n\n入札するかはご自身で判断してください（自動入札はしません）")
 
 
 def archived_ids(tabs):
