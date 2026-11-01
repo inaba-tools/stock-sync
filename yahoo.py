@@ -1348,6 +1348,7 @@ def check_active_listings(M, per_run=5, settings=None):
     token = None
     pw = browser = page = None
     done, cells, flagged, revised = 0, [], [], 0
+    stops = []   # 2026/11/01 本人の希望：問題のある出品（AIがNG・ジャンク・本体ではない）は出品終了する
     try:
         for i, row in todo:
             if done >= per_run or not gem.available(4 if per_run < 50 else 2):
@@ -1391,17 +1392,20 @@ def check_active_listings(M, per_run=5, settings=None):
                     cost = float(str(row[col["仕入れ値(円)"]]).replace(",", "") or 0)
                     if usd is not None and cost and usd < M.floor_price_usd(cost, model, settings):
                         note = f"【状態的に売れにくい】{rank}相場約{int(usd * M.usd_jpy(settings)):,}円／" + note
-                        flagged.append(f"・{title[:30]}（eBay {row[col['eBay出品番号']]}）：状態{rank}・相場約{int(usd * M.usd_jpy(settings)):,}円")
+                        pass
                 except Exception as e:
                     print("状態の相場でエラー:", type(e).__name__, str(e)[:80])
-            if ans.get("ok") is False:
-                note = f"【確認して】{ans.get('reason', '')}／" + note
-                flagged.append(f"・{title[:30]}（eBay {row[col['eBay出品番号']]}）：{ans.get('reason', '')}")
+            bad = ans.get("ok") is False or rank == "ジャンク" or re.search(r"本体ではなく|のみの(商品|出品)|パーツのみ|型番違い", note)
+            if bad:
+                why = str(ans.get("reason") or note)[:40]
+                note = f"【問題あり・出品終了】{why}／" + note
+                stops.append((i, str(row[col["eBay出品番号"]]), why))
+                flagged.append(f"・{title[:30]}（eBay {row[col['eBay出品番号']]}）：{why} → 出品終了")
             cells += [(i, rc, rank), (i, nc, note[:80])]
             if uc and raw:
                 cells.append((i, uc, raw))
             # eBayの出品の状態の説明を書き換える（新品は説明を付けられないので触らない）
-            if rank in RANK_EN and "新品" not in detail.get("condition", ""):
+            if not bad and rank in RANK_EN and "新品" not in detail.get("condition", ""):
                 try:
                     token = token or M.get_access_token()
                     text = condition_text_en(rank, str(ans.get("note_en") or ""))
@@ -1421,10 +1425,18 @@ def check_active_listings(M, per_run=5, settings=None):
         save_mkt()
     if cells:
         tabs.set("無在庫商品リスト", cells)
-    print(f"出品中の状態の確認：{done}件（eBayの状態の説明を書き換え{revised}件）")
+    if stops:
+        token = token or M.get_access_token()
+        ups = []
+        for i, iid, why in stops:
+            ok, msg = M.stop_on_ebay(iid, token)
+            ups.append({"row": i, "status": "stopped" if ok else None, "result": f"AIの確認で問題あり（{why}）のため出品を終了 → {msg}"})
+        M.sheet("update", updates=ups)
+    print(f"出品中の状態の確認：{done}件（eBayの状態の説明を書き換え{revised}件・問題ありで出品終了{len(stops)}件）")
     if flagged:
-        M.alert("【確認して】出品中の商品で状態が気になるもの", "\n".join(flagged[:40]) +
-                "\n\n出品の終了・値下げはしていません（無在庫商品リストのV列に印を付けました）。")
+        M.alert("【AI確認】出品中の商品で問題があったもの", "\n".join(flagged[:40]) +
+                "\n\n問題あり（本体ではない・型番違い・故障など）は出品を終了しました。"
+                "状態的に売れにくいものは印を付けただけです（無在庫商品リストのV列）。")
 
 
 def _xml(t):

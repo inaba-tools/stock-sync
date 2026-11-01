@@ -3927,6 +3927,21 @@ if __name__ == "__main__":
                 a = ebay_active_items(tk).get(iid, {})
                 print(iid, a, trading_call("ReviseFixedPriceItem",
                       f"<Item><ItemID>{iid}</ItemID><StartPrice>{a['price']:.2f}</StartPrice></Item>", tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "endids":   # 指定したeBay出品番号を終了して止める（理由は「番号:理由」）
+            data = sheet("list")
+            tk = get_access_token()
+            want = dict(x.split(":", 1) if ":" in x else (x, "") for x in sys.argv[2:])
+            ups = []
+            for r in data["rows"]:
+                if r["ebay_item_id"] in want and r["status"] != "stopped":
+                    ok, msg = stop_on_ebay(r["ebay_item_id"], tk)
+                    ups.append({"row": r["row"], "status": "stopped" if ok else None,
+                                "result": f"AIの確認で問題あり（{want[r['ebay_item_id']]}）のため出品を終了 → {msg}"})
+                    print(r["ebay_item_id"], msg)
+            if ups:
+                sheet("update", updates=ups)
+                sheet("cleanup")
+            print("終了した出品:", sum(1 for u in ups if u["status"]), "/", len(want))
         elif len(sys.argv) > 1 and sys.argv[1] == "airecheck":   # 2026/11/01 今ある候補・出品をまとめてAIで見る（無料枠の範囲で）
             import yahoo
             data = sheet("list")
