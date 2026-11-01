@@ -1688,7 +1688,8 @@ def _main():
             time.sleep(random.uniform(0.5, 1.5) if yahoo else random.uniform(1.5, 3))
 
         # ---- 出品中なのにメルカリの状態が2回続けて読めない商品は、eBayの出品を終了する（2026/11/01 本人の希望。メールは送らない） ----
-        for x in unknown_twice:
+        # 一度に10件を超えるときはメルカリ側の一時的な不具合・ブロックの可能性が高いので、終了しない
+        for x in (unknown_twice if len(unknown_twice) <= 10 else []):
             ok, msg = stop_on_ebay(x["ebay_item_id"], token or get_access_token())
             updates.append({"row": x["row"], "status": "stopped" if ok else None,
                             "result": f"仕入れ先の状態を2回続けて読めなかったため出品を終了 → {msg}"})
