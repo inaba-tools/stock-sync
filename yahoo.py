@@ -1109,7 +1109,7 @@ def check_active_listings(M, per_run=5):
         return
     tabs = Tabs(M)
     gem = Gemini(tabs)
-    vals = tabs.get("商品リスト")
+    vals = tabs.get("無在庫商品リスト")
     if not vals:
         return
     head = [str(h).strip() for h in vals[0]]
@@ -1141,7 +1141,7 @@ def check_active_listings(M, per_run=5):
         if ans.get("ok") is False:
             flagged.append(f"・{row[7][:30]}（eBay {row[2]}）：{ans.get('reason', '')}")
     if cells:
-        tabs.set("商品リスト", cells)
+        tabs.set("無在庫商品リスト", cells)
     if flagged:
         M.alert("【確認して】出品中の商品で状態が気になるもの", "\n".join(flagged) +
                 "\n\n出品の終了・値下げはしていません。必要ならご自身で判断してください。")
@@ -1156,7 +1156,7 @@ def ai_rank(M, ebay_id):
         return ""
     if _ranks[0] is None:
         _ranks[0] = {}
-        vals = Tabs(M).get("商品リスト")
+        vals = Tabs(M).get("無在庫商品リスト")
         head = [str(h).strip() for h in (vals[0] if vals else [])]
         if "状態ランク（AI）" in head:
             rc = head.index("状態ランク（AI）")

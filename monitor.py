@@ -1,7 +1,7 @@
 """(cloud) - メルカリ売り切れ検知 → eBay在庫0
 
 GitHub Actions から30分ごとに実行される。
-商品リストは Google スプレッドシート（Apps Script 経由）から読み書きする。
+無在庫商品リスト（旧：商品リスト）は Google スプレッドシート（Apps Script 経由）から読み書きする。
 秘密情報はすべて GitHub の Secrets から環境変数として受け取る。
 """
 import base64
