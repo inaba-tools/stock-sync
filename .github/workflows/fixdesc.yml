@@ -37,9 +37,7 @@ jobs:
       - run: python -m playwright install --with-deps chromium
 
       - name: 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01）
-        run: |
-          python monitor.py endids "366735983813:型番違い（V602SH）" "366754810072:型番違い（V602SH）" "366763480952:型番違い（V602SH）"
-          python monitor.py retitle "366750409341=Sony Cyber-shot DSC-T70 8.1MP Digital Camera Silver Tested From Japan" "366775112042=Nikon COOLPIX S3300 16.0MP Digital Camera Silver Tested Working From Japan"
+        run: python monitor.py airewrite ${{ inputs.n || '200' }}
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
