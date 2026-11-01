@@ -1388,9 +1388,29 @@ def junk_combo(M, data, page):
     pink_limit = sget(smap, "ピンクのジャンクの上限", PINK_JUNK_MAX) or PINK_JUNK_MAX
 
     buy_limit = sget(smap, "ジャンクの買う上限", JUNK_BUY) or JUNK_BUY
+    room = max(0, limit - buy_limit)   # 値下げ交渉の余地（探す範囲−買う上限＝1,000円）
+    # 2026/11/02 本人と決定：機種ごとに「eBayで売れた値段（安い側）で、2台買っても利益2,000円残る1台の値段」を買う上限にする
+    # （設定の買う上限より下にはしない）。探す範囲はそれ＋交渉の余地。売れた値段は月1回更新されるので自動で追従する
+    buy_by_model = {}
+    for m in JUNK_MODELS:
+        b = buy_limit
+        try:
+            sold = sold_for(tabs, m, "")
+            if sold and sold.get("安い"):
+                b = max(buy_limit, int((calc.net(sold["安い"]) - JUNK_PROFIT_MIN) / 2 // 100 * 100))
+        except Exception:
+            pass
+        buy_by_model[m] = b
+    print("ジャンクの買う上限（機種ごと）:", buy_by_model)
+
+    def is_pink(model, color):
+        return color == "ピンク" and str(model).upper() in PINK_MODELS
+
+    def buy_of(model, color):
+        return pink_limit if is_pink(model, color) else buy_by_model.get(model, buy_limit)
 
     def lim(model, color):
-        return pink_limit if (color == "ピンク" and str(model).upper() in PINK_MODELS) else limit
+        return pink_limit if is_pink(model, color) else buy_of(model, color) + room
     tabs.ensure(COMBO, COMBO_HEAD)
     vals = tabs.get(COMBO, fresh=True)
     units = [_unit(r) for r in vals[1:] if len(r) > CI["ID"] and str(r[CI["ID"]]).strip().startswith("http")]
@@ -1431,7 +1451,7 @@ def junk_combo(M, data, page):
     pink_new = []
     for model, names in JUNK_MODELS.items():
         items = []
-        qs = [(q, limit) for q in names]
+        qs = [(q, lim(model, "")) for q in names]
         if model.upper() in PINK_MODELS:
             qs += [(f"{q} ピンク", None) for q in names]   # ピンクは上限なしで探す（お知らせ用）
         for q, pmax in qs:
@@ -1504,7 +1524,7 @@ def junk_combo(M, data, page):
     for u in units:
         u["提案"], u["組"], u["役割"], u["見込み利益"], u["plan_memo"] = "", "", "", "", ""
         pink = u["色"] == "ピンク" and str(u["機種"]).upper() in PINK_MODELS
-        u["buy"] = u["price"] if pink else min(u["price"], buy_limit)   # ピンクはそのままの値段で買う
+        u["buy"] = u["price"] if pink else min(u["price"], buy_of(u["機種"], u["色"]))   # ピンクはそのままの値段で買う
     plans = _plans(M, tabs, calc, settings, units)
     out, used = [], set()
     for k, p in enumerate(plans, start=1):
