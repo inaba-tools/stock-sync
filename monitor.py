@@ -1605,7 +1605,7 @@ def _main():
                 elif status == "on_sale" and info and ebay_busy:
                     upd["result"] = "【待機】eBayが一時的に受け付けないため、次の回に出品します"
                 elif status == "on_sale" and info and free_full:
-                    upd["result"] = f"【待機】今月の無料出品枠（{FREE_LISTINGS}件）を使い切ったため、来月1日まで出品を待ちます"
+                    upd["result"] = "【待機】eBayの無料出品枠（12月からは月250件）の上限のため、枠が空くまで出品を待ちます"
                 elif status == "on_sale" and info and day_full:
                     upd["result"] = f"【待機】今日の出品ペースの上限（{day_cap(free_used)}件）に達したため、明日以降に出品します"
                 elif status == "on_sale" and info and listed >= list_cap(settings):
@@ -1626,7 +1626,8 @@ def _main():
                                 free_used = FREE_LISTINGS
                             print(f"今月の無料出品枠：{free_used}件使用（月末までの自動更新を含む）／{FREE_LISTINGS}件")
                             print(f"今日の出品：{FREE_TODAY['new']}件／今日の上限{day_cap(free_used)}件（残りの枠を月末までの{FREE_TODAY['days_left']}日で割った数）")
-                        if free_used >= FREE_LISTINGS - FREE_MARGIN:
+                        if free_used >= FREE_LISTINGS - FREE_MARGIN \
+                                or FREE_TODAY["active"] >= FREE_MONTHLY_AFTER - FREE_MARGIN:   # 来月の自動更新で250件を超えないように
                             free_full = True
                             raise RuntimeError("FREE_FULL")
                         if FREE_TODAY["new"] >= day_cap(free_used):
@@ -1662,6 +1663,7 @@ def _main():
                     if res:
                         free_used = (free_used or 0) + 1
                         FREE_TODAY["new"] += 1
+                        FREE_TODAY["active"] += 1
                         dup_note(r, info.get("price"), detail.get("images", []), res["ebay_item_id"])
                         upd["ebay_item_id"] = res["ebay_item_id"]
                         upd["listed_at"] = now()
@@ -1671,7 +1673,7 @@ def _main():
                         listed_per_model[k] = listed_per_model.get(k, 0) + 1
                         notify(f"【出品】{res['title_en']} ${res['price']:.2f}（eBay {res['ebay_item_id']}）")
                     elif err == "WAIT":
-                        upd["result"] = f"【待機】今月の無料出品枠（{FREE_LISTINGS}件）を使い切ったため、来月1日まで出品を待ちます"
+                        upd["result"] = "【待機】eBayの無料出品枠（12月からは月250件）の上限のため、枠が空くまで出品を待ちます"
                     elif err and TEMP_EBAY_ERR.search(err):
                         upd["result"] = f"【待機】eBayが一時的に受け付けないため、次の回に出品します（{err[7:120]}）"
                     elif err == "LIMITWAIT":
@@ -1686,7 +1688,8 @@ def _main():
                     elif err and re.search(r"limit|限度|上限|exceed", err, re.I):
                         quota_hit = True   # 出品枠の上限：利益が大きければ入れ替え、そうでなければ枠が空くまで待つ
                         upd["result"] = "【待機】eBayの月間出品枠の上限のため、枠が空くまで待ちます"
-                        if swap_out(None, expected_profit(info.get("price"), r.get("query"), settings)):
+                        free_ok = free_used is not None and free_used < FREE_LISTINGS - FREE_MARGIN   # 入れ替えでも新しい出品は無料枠を使う
+                        if free_ok and swap_out(None, expected_profit(info.get("price"), r.get("query"), settings)):
                             try:
                                 res2, err2 = create_listing(r, info, detail, settings, token)
                             except Exception as e:
@@ -1696,6 +1699,7 @@ def _main():
                                 upd["listed_at"] = now()
                                 upd["result"] = f"利益が大きいため入れ替えて出品しました（${res2['price']:.2f}）→ 売り切れ監視を開始"
                                 listed += 1
+                                free_used += 1
                                 k = model_key(r.get("query"))
                                 listed_per_model[k] = listed_per_model.get(k, 0) + 1
                     else:
@@ -2687,9 +2691,10 @@ FREE_MARGIN = 5        # 数え違いに備えて、245件で止める
 PT = ZoneInfo("America/Los_Angeles")   # eBayの月の区切り（米国太平洋時間）
 # 2026/10/21 ベーシックストア契約で月1,000件。2026年12月からは月250件（本人より）。月の区切りは米国太平洋時間
 FREE_LISTINGS = 1000 if datetime.now(PT).strftime("%Y-%m") <= "2026-11" else 250
+FREE_MONTHLY_AFTER = 250   # 12月からの月の無料枠。出品中の商品は毎月の自動更新で1件ずつ使うので、出品中の件数もこれ未満に保つ
 
 
-FREE_TODAY = {"new": 0, "days_left": 30}
+FREE_TODAY = {"new": 0, "days_left": 30, "active": 0}
 
 
 def list_cap(settings):
@@ -2718,6 +2723,7 @@ def free_listings_used(token):
     used, page_no = 0, 1
     today0 = now_pt.replace(hour=0, minute=0, second=0, microsecond=0)
     FREE_TODAY["new"] = 0
+    FREE_TODAY["active"] = 0
     FREE_TODAY["days_left"] = max(1, (m1 - today0).days)
     while page_no <= 20:
         ack, errs, root = trading_call_root(
@@ -2737,6 +2743,8 @@ def free_listings_used(token):
             if t >= today0:
                 FREE_TODAY["new"] += 1   # 今日（米国太平洋時間）新しく出した件数
             end = datetime.fromisoformat(en.replace("Z", "+00:00")) if en else m1
+            if status == "Active":
+                FREE_TODAY["active"] += 1   # 出品中の件数（来月の自動更新で枠を使う）
             last = m1 if status == "Active" else min(end, m1)   # 出品中なら月末までの更新も数える
             while t < last:
                 if t >= m0:
