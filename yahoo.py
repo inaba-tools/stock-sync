@@ -843,7 +843,7 @@ def run(M, data, mode="discover", flea=None):
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
                 + "\n\n古物台帳と手元在庫シートに記録しました。")
-    if mode == "discover":
+    if mode in ("discover", "soon"):   # 2026/11/01 30分ごとの見張りの回でも並べ直す（いつも終了が近い順に）
         try:
             tidy(tabs)
         except Exception as e:
@@ -898,6 +898,12 @@ def tidy(tabs):
     head = vals[0]
     rows = [list(r) + [""] * (n - len(r)) for r in vals[1:]]
     rows = [[_cell_out(v) for v in r[:n]] for r in rows if any(str(x).strip() for x in r)]
+    changed = False
+    for r in rows:   # 終了日時の書き方をそろえる（日時は 2026/11/01 21:30、フリマの即決は「即決」）
+        e = r[COL["終了日時"] - 1]
+        d = to_dt(e)
+        r[COL["終了日時"] - 1] = d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else ("即決" if str(e).startswith("即決") else e)
+        changed = changed or (str(e).startswith("即決") and e != "即決")
     # 落札・購入済み：手元在庫シートに無ければ記録してから外す（シートで手で「購入済み」にした分も）
     try:
         dev_txt = " ".join(str(c) for r in tabs.get(DEVICES, fresh=True)[1:] for c in r[:4])
@@ -919,7 +925,7 @@ def tidy(tabs):
         return (0 if st in ACTIVE else 1, 0 if end else 1, end or far)
 
     ordered = sorted(keep, key=key)
-    if not done and [r[COL["ID"] - 1] for r in ordered] == [r[COL["ID"] - 1] for r in keep]:
+    if not done and not changed and [r[COL["ID"] - 1] for r in ordered] == [r[COL["ID"] - 1] for r in keep]:
         return
     if done:
         tabs.ensure(ARCHIVE, head)
@@ -1370,7 +1376,7 @@ def flea_junk(M, data, page):
                 continue
             rows.append(({"状態": "検討中", "src": it["src"], "用途": use, "ジャンル": genre, "機種": model, "色": color,
                           "商品の状態": "ジャンク：" + t[:30], "現在価格": price, "送料": 0, "入札数": "",
-                          "終了日時": "即決（早い者勝ち）", "上限": cap if judged else "AI未判定", "相場": "",
+                          "終了日時": "即決", "上限": cap if judged else "AI未判定", "相場": "",
                           "メモ": (memo if judged else f"{memo}／目安の上限{rough:,}円（外装C・部品代は仮）"),
                           "seller": it.get("seller", "")}, u))
     save_judged()
