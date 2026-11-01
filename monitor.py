@@ -664,7 +664,9 @@ CAMERA_MODELS = {"DSC-W830": 663, "DSC-W570": 670, "DSC-W800": 530, "DSC-W55": 3
                  "DSC-T99": 376, "DSC-W530": 279, "DSC-W330": 221, "DSC-TX7": 156, "DSC-TX10": 145, "DSC-WX500": 137,
                  "DSC-W290": 128, "DSC-WX220": 116, "DSC-WX300": 111, "DSC-W510": 109, "DSC-W230": 102, "DSC-T90": 98,
                  "DSC-T70": 86, "DSC-TX30": 86, "DSC-TX66": 84, "DSC-T2": 78, "DSC-W560": 76, "DSC-T20": 73,
-                 "DSC-TX55": 73, "DSC-WX50": 72, "DSC-TX20": 57, "DSC-WX80": 47, "DSC-T300": 41}
+                 "DSC-TX55": 73, "DSC-WX50": 72, "DSC-TX20": 57, "DSC-WX80": 47, "DSC-T300": 41,
+                 # 2026/11/01 追加（Terapeakの売れた値段とメルカリの売れた値段を比べて、利益2,000円以上残る機種）
+                 "DSC-HX9V": 89, "DSC-HX30V": 122, "DSC-HX50V": 20}
 MD_MODELS = {"MZ-NE410": 62, "MZ-RH1": 29, "MZ-E620": 26, "MZ-N1": 22, "MZ-N910": 20, "MZ-N920": 15, "MZ-E900": 10,
              "MZ-N707": 51, "MZ-N505": 46}
 for _m in CAMERA_MODELS:
@@ -691,6 +693,9 @@ OTHER_CAMERAS = {
        ("200", "630", "600F", "610F", "190", "150", "420F", "640", "210", "160")},
     "SX620": ("Canon", "Canon PowerShot", "Canon PowerShot SX620 HS"),
     "SX720": ("Canon", "Canon PowerShot", "Canon PowerShot SX720 HS"),
+    # 2026/11/01 追加（安い出品だけ利益が出る。仕入れ上限・利益の判定はいつも通り）
+    "SX610": ("Canon", "Canon PowerShot", "Canon PowerShot SX610 HS"),
+    "SX710": ("Canon", "Canon PowerShot", "Canon PowerShot SX710 HS"),
 }
 for _m, (_b, _s, _n) in OTHER_CAMERAS.items():
     GAMES[_m] = {"kind": "camera", "brand": _b, "platform": _s, "series": _n, "ser_name": _s,
