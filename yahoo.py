@@ -766,7 +766,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
 
 
 # ---------------------------------------------------------------- メイン
-YAHOO_GAMES = {"PCH-1000", "PCH-2000"}   # ヤフオク・修理用ジャンクで扱うゲーム機（無在庫は設定B12のゲーム機を全部扱う）
+YAHOO_GAMES = set()   # ヤフオクで扱うゲーム機。2026/11/01 本人の希望でPS Vitaも外し、ゲーム機は扱わない（無在庫は設定B12のゲーム機を全部扱う）
 
 
 def keywords_for(M, settings):
