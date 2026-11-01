@@ -1318,8 +1318,12 @@ def ai_title(ai, model, fallback):
     t = re.sub(r"\s+", " ", str((ai or {}).get("title_en") or "")).strip()
     if not t or len(t) > 80 or not t.isascii():
         return fallback
+    t = re.sub(r"\s*\[[^\]]*\]\s*", " ", t).strip()   # [AS-IS] などの括弧書きは付けない
     key = re.sub(r"[^A-Z0-9]", "", str(model).upper())
-    if key and key not in re.sub(r"[^A-Z0-9]", "", t.upper()):
+    pat = r"[\s\-_/]*".join(re.escape(c) for c in key)
+    if key and not re.search(r"(?<![A-Z0-9])" + pat + r"(?![0-9])", t.upper()):
+        return fallback   # 型番が無い、または別の型番（602SH と V602SH など）
+    if re.search(r"\bAS[- ]?IS\b|\bN\.?A\.?\b", t.upper()):
         return fallback
     if re.search(r"\b(NEW|MINT|PERFECT|L@@K)\b", t.upper()) and (ai or {}).get("rank") != "S":
         return fallback   # 誇張した言葉は使わない

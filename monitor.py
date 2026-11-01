@@ -3977,6 +3977,11 @@ if __name__ == "__main__":
         elif len(sys.argv) > 1 and sys.argv[1] == "buyermsg":   # 買い手の質問が来た・「送る」にチェックしたとき（管理表から呼ばれる）
             import yahoo
             yahoo.buyer_messages(sys.modules[__name__])
+        elif len(sys.argv) > 1 and sys.argv[1] == "retitle":   # 「番号=新しいタイトル」で出品のタイトルだけ直す
+            tk = get_access_token()
+            for x in sys.argv[2:]:
+                iid, t = x.split("=", 1)
+                print(iid, trading_call("ReviseFixedPriceItem", f"<Item><ItemID>{iid}</ItemID><Title>{escape(t)}</Title></Item>", tk))
         elif len(sys.argv) > 1 and sys.argv[1] == "airewrite":   # 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01）
             import yahoo
             yahoo.ai_rewrite_active(sys.modules[__name__], limit=int(sys.argv[2]) if len(sys.argv) > 2 else 200)
