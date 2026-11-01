@@ -1402,7 +1402,7 @@ def nego_refresh(M, tabs, page):
     cells, n = [], 0
     for i, r in enumerate(vals[1:], start=2):
         r = list(r) + [""] * (len(NEGO_HEAD) - len(r))
-        if str(r[9]).strip() not in ("未", "お願い済み", "OK") or n >= NEGO_RECHECK_MAX:
+        if str(r[9]).strip() not in ("未", "送る予定", "送った", "お願い済み", "OK") or n >= NEGO_RECHECK_MAX:   # 状況：未／送る予定／送った／OK／断られた／購入済み／終了
             continue
         last = to_dt(r[11])
         if last and (now_dt - last).total_seconds() < NEGO_RECHECK_H * 3600:
