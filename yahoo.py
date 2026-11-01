@@ -1214,13 +1214,16 @@ CI = {k: i for i, k in enumerate(COMBO_HEAD)}
 JUNK_MODELS = {"903KC": ["903KC", "DIGNOケータイ3", "ディグノケータイ3"], "902KC": ["902KC"],   # 2026/11/01 本人OK：3機種追加
                "A202KC": ["A202KC"], "KY-42C": ["KY-42C"],
                "601SH": ["601SH"], "602SH": ["602SH"], "A203KC": ["A203KC"]}   # 2026/11/01 本人OK：3機種追加
-# 部品が共通で、組み合わせてよい機種のまとまり（修理部品表のメモ：902KC/903KC共通）。ここに無い機種は同じ機種同士だけ
-PART_GROUPS = [{"902KC", "903KC"}]
+# 部品が共通で、組み合わせてよい機種のまとまり。ここに無い機種は同じ機種同士だけ
+# 902KC/903KC：修理部品表のメモ。A202KC/A203KC：DIGNO ケータイ4の会社違い。601SH/602SH：AQUOS ケータイ2の会社違い（2026/11/01 調べ）
+# KY-42CもDIGNO ケータイ4のドコモ版だが外装のデザインが違うので単独
+PART_GROUPS = [{"902KC", "903KC"}, {"A202KC", "A203KC"}, {"601SH", "602SH"}]
 
 
 def _same_parts(a, b):
     return a == b or any(a in g and b in g for g in PART_GROUPS)
-JUNK_MAX = 3000            # 1台の上限（送料込み）。2026/11/01 本人の希望で2,000→3,000円（値下げ交渉できるかもしれないため）。設定シートに「ジャンクの上限」があればそちら
+JUNK_MAX = 3000            # 探す範囲の上限（送料込み）。2026/11/01 本人の希望で2,000→3,000円（2,000円に値下げ交渉できるかもしれないため）
+JUNK_BUY = 2000            # 実際に買う値段の上限（3,000円までの出品は2,000円に値下げしてもらえた前提で利益を計算）。設定シートに「ジャンクの上限」があればそちら
 PINK_JUNK_MAX = 5000       # 2026/11/01 本人の希望：ピンクの902KC・903KCのジャンクだけ上限5,000円（設定「ピンクのジャンクの上限」があればそちら）
 PINK_SEEN_FILE = os.path.join(".cache", "pink_seen.json")   # ピンクのお知らせを送った出品（1つの出品につき1回だけ）
 JUNK_PROFIT_MIN = 2000     # 提案する見込み利益の下限（ジャンクの利益ライン）
@@ -1329,7 +1332,7 @@ def _plans(M, tabs, calc, settings, units):
         # 単品：悪い部品が全部、修理部品表で買える
         cost_parts = [buy(b["機種"], p) for p in b["bad"]]
         if all(c is not None for c in cost_parts):
-            pf, why = profit(b["機種"], b["色"], b["rank"], b["price"] + sum(cost_parts))
+            pf, why = profit(b["機種"], b["色"], b["rank"], b.get("buy", b["price"]) + sum(cost_parts))
             if pf is not None:
                 plans.append({"kind": "単品", "units": [b], "profit": pf, "color": b["色"], "rank": b["rank"],
                               "memo": ("部品" + "・".join(sorted(b["bad"])) + f"を買う（{int(sum(cost_parts)):,}円）"
@@ -1356,7 +1359,7 @@ def _plans(M, tabs, calc, settings, units):
             if ok and all(p in d["good"] for p in EXTERIOR) and d["色"] != b["色"]:
                 options.append((sorted(set(take) | set(EXTERIOR)), d))
             for tk, ext in options:
-                cost = b["price"] + d["price"] + bought
+                cost = b.get("buy", b["price"]) + d.get("buy", d["price"]) + bought
                 pf, why = profit(b["機種"], ext["色"], ext["rank"], cost)
                 if pf is None:
                     continue
@@ -1383,6 +1386,8 @@ def junk_combo(M, data, page):
     gem = Gemini(tabs)
     limit = sget(smap, "ジャンクの上限", JUNK_MAX) or JUNK_MAX
     pink_limit = sget(smap, "ピンクのジャンクの上限", PINK_JUNK_MAX) or PINK_JUNK_MAX
+
+    buy_limit = sget(smap, "ジャンクの買う上限", JUNK_BUY) or JUNK_BUY
 
     def lim(model, color):
         return pink_limit if (color == "ピンク" and str(model).upper() in PINK_MODELS) else limit
@@ -1498,6 +1503,8 @@ def junk_combo(M, data, page):
     # ---- 組み合わせを作り直してシートを書き直す
     for u in units:
         u["提案"], u["組"], u["役割"], u["見込み利益"], u["plan_memo"] = "", "", "", "", ""
+        pink = u["色"] == "ピンク" and str(u["機種"]).upper() in PINK_MODELS
+        u["buy"] = u["price"] if pink else min(u["price"], buy_limit)   # ピンクはそのままの値段で買う
     plans = _plans(M, tabs, calc, settings, units)
     out, used = [], set()
     for k, p in enumerate(plans, start=1):
@@ -1516,7 +1523,8 @@ def junk_combo(M, data, page):
     rows = [COMBO_HEAD]
     for r, u in enumerate(out + rest, start=2):
         label = u["出品元"] or ("Yahoo!フリマ" if "paypay" in u["ID"] else "メルカリ")
-        memo = " ／ ".join(x for x in (u.get("plan_memo"), str(u["メモ"]).split(" ／ ")[-1] if u["メモ"] else "") if x)
+        nego = f"要交渉→{int(u['buy']):,}円" if u["buy"] < u["price"] else ""
+        memo = " ／ ".join(x for x in (nego, u.get("plan_memo"), str(u["メモ"]).split(" ／ ")[-1] if u["メモ"] else "") if x)
         rows.append([u["提案"], u["組"], u["役割"], u["見込み利益"], u["機種"], u["色"], u["price"], u["rank"],
                      "・".join(p for p in PART_NAMES if p in u["good"]), "・".join(p for p in PART_NAMES if p in u["bad"]),
                      memo, f'=HYPERLINK(P{r},"{label}")', label, u["見つけた日時"], u["最終確認"] or now_s(), u["ID"]])
