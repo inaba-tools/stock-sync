@@ -1778,8 +1778,10 @@ def buyer_messages(M, gem=None):
         have.add(mid)
     if cells:
         tabs.set(BUYER, cells)
-    if rows:
-        tabs.append(BUYER, rows)
+    if rows:   # 「送る」のチェック欄があると最終行の判定がずれるので、A列が空の最初の行から書く
+        cur = tabs.get(BUYER, fresh=True)
+        start = next((i for i, r in enumerate(cur[1:], start=2) if not (r and str(r[0]).strip())), len(cur) + 1)
+        tabs.set(BUYER, [(start + k, c, v) for k, r in enumerate(rows) for c, v in enumerate(r, start=1)])
     # ③ 返信が済んだ行（ここから送った・eBayで直接返信した）は消す（2026/11/01 本人の希望）
     try:
         answered = set()
