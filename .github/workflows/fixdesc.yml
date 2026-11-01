@@ -6,6 +6,9 @@ on:
       n:
         description: "何件まで"
         default: "200"          # 手動実行のみ
+      cmd:
+        description: "ほかの1回だけの作業（例：endids 番号:理由）。空なら下のAI書き換え"
+        default: ""
 
 concurrency:
   group: oneoff
@@ -36,9 +39,12 @@ jobs:
 
       - run: python -m playwright install --with-deps chromium
 
-      - name: 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01）
-        run: python monitor.py airewrite ${{ inputs.n || '200' }}
+      - name: 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01）／cmd があればその作業
+        run: |
+          if [ -n "$CMD" ]; then python monitor.py $CMD; else python monitor.py airewrite "$N"; fi
         env:
+          CMD: ${{ inputs.cmd }}
+          N: ${{ inputs.n || '200' }}
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
           EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
