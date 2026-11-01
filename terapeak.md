@@ -44,7 +44,7 @@ window.__grab = async (kw) => {
   return rows.map(t => { const m = t.match(/image (.*?) Edit [¥$]([\d,.]+) (Fixed price|Auction)(?: [\d,]+ bids?)? [¥$]([\d,.]+) .*?Free shipping ([\d,]+) /);
     return m ? { t: m[1], p: +m[2].replace(/,/g, ''), s: +m[4].replace(/,/g, ''), n: +m[5].replace(/,/g, '') } : null; }).filter(Boolean);
 };
-window.__ACC = /battery|film|protector|glass|case|cover|charger only|cable|adapter|skin|decal|replacement|parts|lcd|housing|shell|button|joystick|stick|port|motherboard|stand|grip|pouch|bag|strap|mock|dummy|sticker|game only|cartridge only|manual only|box only|empty box|for parts|not working|junk/i;
+window.__ACC = /battery|film|protector|glass|case only|carrying case|hard case|game case|cover|charger only|cable|adapter|skin|decal|replacement|parts|lcd|housing|shell|button|joystick|stick|port|motherboard|stand|grip|pouch|bag|strap|mock|dummy|sticker|game only|cartridge only|manual only|box only|empty box|for parts|not working|junk/i;
 window.__run = async (M) => {
   const q = (a, x) => a[Math.min(a.length - 1, Math.floor(a.length * x))];
   window.__out = {}; window.__done = false;
@@ -60,15 +60,11 @@ window.__run = async (M) => {
 ```
 
 ## 機種リスト（[機種, タイトルに含む言葉の正規表現, 902KCだけピンクを分ける]）
+今はガラケーとPS Vitaだけ。ほかのゲーム機（PSP・DS・3DS・ゲームボーイ）は、Terapeakのタイトルに複数の機種がまとめて書かれていて（「PSP 1000/2000/3000」など）機種ごとの値段が正しく出ないので、まだ入れていない。入れるときは型番がはっきりタイトルにある出品だけを数える方法を考えてから。P-01Gは売れた数が少なすぎるので外した。
 ```js
 [["902KC","902KC|903KC",1],["KY-42C","KY-?42C"],["A202KC","A202KC"],["601SH","601SH"],["KYF31","KYF31"],["SH-02L","SH-?02L"],
- ["701KC","701KC"],["805SH","805SH"],["SH-01J","SH-?01J"],["A205SH","A205SH"],["KYF42","KYF42"],["P-01G","P-?01G"],["A203KC","A203KC"],
- ["602SH","602SH"],["806SH","806SH"],["501KC","501KC"],
- ["PSP-3000","PSP|3000"],["PSP-2000","PSP|2000"],["PSP-1000","PSP|1000"],["PSP-N1000","PSP ?go|N1000"],["PCH-2000","vita|2000"],
- ["PCH-1000","vita|1000"],["DMG-01","game ?boy|DMG"],["MGB-001","pocket|MGB"],["CGB-001","color|CGB"],["AGB-001","advance|AGB"],
- ["AGS-001","SP|AGS"],["OXY-001","micro|OXY"],["USG-001","lite|USG"],["NTR-001","DS|NTR"],["TWL-001","DSi|TWL"],
- ["UTL-001","DSi ?LL|DSi ?XL|UTL"],["CTR-001","3DS|CTR"],["SPR-001","3DS|SPR"],["RED-001","3DS|RED"],["KTR-001","3DS|KTR"],
- ["JAN-001","2DS|JAN"],["WSC-001","wonder|WSC"],["NEOP-10","neo ?geo|NEOP"]]
+ ["701KC","701KC"],["805SH","805SH"],["SH-01J","SH-?01J"],["A205SH","A205SH"],["KYF42","KYF42"],["A203KC","A203KC"],
+ ["602SH","602SH"],["806SH","806SH"],["501KC","501KC"],["PCH-2000","vita|2000"],["PCH-1000","vita|1000"]]
 ```
 
 ## Chromeが使えないとき
