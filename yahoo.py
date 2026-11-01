@@ -35,7 +35,9 @@ DUTY = 12.5
 COND_RANK = {"NEW": "S", "USED10": "S", "USED20": "A", "USED40": "B", "USED60": "C", "USED80": "C"}
 NOT_ITEM = re.compile(r"ケースのみ|カバーのみ|充電器のみ|箱のみ|説明書のみ|モック|ダミー|電池パックのみ|バッテリーのみ|"
                       r"フィルム|保護|互換|部品のみ|パーツのみ|基板のみ|外装のみ|ジャケット|シール|\d{3,4}\s*mAh|容量\+")
-PINK_MODELS = ("902KC", "903KC")
+PINK_MODELS = ("902KC", "903KC")   # 相場の読み替え（903KC→902KC）にも使うので、機種を足すときは PINK_JUNK へ
+# 2026/11/02 本人OK：ピンクが高く売れるので、出たらメール・買う上限5,000円にする機種（AQUOS ケータイ2のピンクも3万円以上で売れている）
+PINK_JUNK = ("902KC", "903KC", "601SH", "602SH")
 
 
 def now_s():
@@ -1401,10 +1403,15 @@ def junk_combo(M, data, page):
         except Exception:
             pass
         buy_by_model[m] = b
+    for g in PART_GROUPS:   # 2026/11/02 同じ作りの機種は安いほうの上限にそろえる（602SHは601SHの高い取引が混ざって高く見えていた）
+        low = min(buy_by_model.get(m, buy_limit) for m in g)
+        for m in g:
+            if m in buy_by_model:
+                buy_by_model[m] = low
     print("ジャンクの買う上限（機種ごと）:", buy_by_model)
 
     def is_pink(model, color):
-        return color == "ピンク" and str(model).upper() in PINK_MODELS
+        return color == "ピンク" and str(model).upper() in PINK_JUNK
 
     def buy_of(model, color):
         return pink_limit if is_pink(model, color) else buy_by_model.get(model, buy_limit)
@@ -1452,7 +1459,7 @@ def junk_combo(M, data, page):
     for model, names in JUNK_MODELS.items():
         items = []
         qs = [(q, lim(model, "")) for q in names]
-        if model.upper() in PINK_MODELS:
+        if model.upper() in PINK_JUNK:
             qs += [(f"{q} ピンク", None) for q in names]   # ピンクは上限なしで探す（お知らせ用）
         for q, pmax in qs:
             try:
@@ -1476,7 +1483,7 @@ def junk_combo(M, data, page):
             if M.looks_like_accessory(t) and not any(w in t for w in M.BODY_WORDS):
                 continue
             color = color_of(t)
-            if color == "ピンク" and model.upper() in PINK_MODELS and u not in pink_seen:
+            if color == "ピンク" and model.upper() in PINK_JUNK and u not in pink_seen:
                 pink_seen.add(u)
                 pink_new.append(f"・[{it['src']}] {model} {int(it['price']):,}円 {t[:40]}\n  {u}")
             if u in known or int(it["price"]) > lim(model, color):
@@ -1511,7 +1518,7 @@ def junk_combo(M, data, page):
             added += 1
     save_judged()
     if pink_new:   # 2026/11/01 本人の希望：ピンクの902KC・903KCが出たら、ジャンクでも値段に関係なくすぐメール
-        M.alert(f"【ピンク】902KC・903KCが{len(pink_new)}件出ました", "\n".join(pink_new)
+        M.alert(f"【ピンク】ガラケーのピンクが{len(pink_new)}件出ました", "\n".join(pink_new)
                 + "\n\n購入はご自身で（自動では買いません）。ジャンクは5,000円以下ならジャンク組み合わせシートにも入ります。")
     try:
         os.makedirs(".cache", exist_ok=True)
@@ -1523,7 +1530,6 @@ def junk_combo(M, data, page):
     # ---- 組み合わせを作り直してシートを書き直す
     for u in units:
         u["提案"], u["組"], u["役割"], u["見込み利益"], u["plan_memo"] = "", "", "", "", ""
-        pink = u["色"] == "ピンク" and str(u["機種"]).upper() in PINK_MODELS
         u["buy"] = min(u["price"], buy_of(u["機種"], u["色"]))
     plans = _plans(M, tabs, calc, settings, units)
     out, used = [], set()
