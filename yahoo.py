@@ -1242,6 +1242,8 @@ def consider(M, tabs, gem, calc, settings, it, kw, genre):
     if color == "複数色":
         return None
     junk = bool(JUNK_WORD.search(t)) or it["cond"] == "USED80"
+    if junk and genre == "ゲーム機":   # 2026/11/01 本人の希望：ゲーム機のジャンク（修理して売る分）は扱わない
+        return None
     pink = color == "ピンク" and model.upper() in PINK_MODELS
     ship = it["ship"]
     ship_v = ship if ship is not None else 1000   # 送料が分からないときは1,000円と見て計算（メモに書く）
