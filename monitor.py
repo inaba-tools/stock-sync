@@ -737,6 +737,8 @@ NEW_GENRES = {
     # ビデオカメラ：25×18×10cmほどの箱で1kgの料金（東海岸あてで約5,600円）
     "video": {"mercari": "4012", "ebay_cat": "11724", "yahoo": 49429, "ship": 5600},
     "watch": {"mercari": "39", "ebay_cat": "31387", "yahoo": 1647},
+    # 2026/11/01 追加：フィルムのコンパクトカメラ（メルカリ「コンパクトカメラ(フィルム)」・eBay「Film Cameras」）
+    "film": {"mercari": "4031", "ebay_cat": "15230", "yahoo": 0},
 }
 
 
@@ -786,7 +788,10 @@ for _c, _mv in (("SARB033", "Automatic"), ("SARB035", "Automatic"), ("SARB017", 
 for _c, _mv, _sx in (("GW-M5610", "Quartz (Solar)", "U"), ("GW-5000", "Quartz (Solar)", "U"),
                      ("DW-5000", "Quartz", ""), ("GW-B5600", "Quartz (Solar)", "")):
     _add_new(_c, "watch", "Casio", "Casio G-Shock", f"Casio G-Shock {_c}", suffix=_sx, movement=_mv, display="Digital")
-NEW_KINDS = {"cassette", "cd", "video", "watch"}
+# 2026/11/01 フィルムカメラ（日本の出品者からよく売れていて、メルカリとの差で利益が出る機種）
+_add_new("AF35M", "film", "Canon", "Canon Autoboy", "Canon AF35M Autoboy", brand_re=r"CANON|キャノン|キヤノン|オートボーイ|AUTOBOY")
+_add_new("TRIP 35", "film", "Olympus", "Olympus Trip", "Olympus Trip 35", code="TRIP 35", brand_re=r"OLYMPUS|オリンパス")
+NEW_KINDS = {"cassette", "cd", "video", "watch", "film"}
 # 時計：偽物・部品だけの出品を外す（商品名で判断）
 WATCH_FAKE_RE = re.compile(r"レプリカ|コピー|スーパーコピー|偽物|風(?![防])|タイプ|互換|オマージュ|カスタム|MOD|"
                            r"(ベルト|バンド|ケース|ベゼル|風防|ガラス|文字盤|ムーブメント|箱|保証書)(のみ|だけ|単品)|部品|パーツ", re.I)
@@ -3036,6 +3041,8 @@ def create_listing(r, info, detail, settings, token):
             [("Brand", gi["brand"]), ("Model", gi.get("code", model)), ("Type", "Wristwatch"), ("Department", "Men"),
              ("Movement", gi.get("movement", "Quartz")), ("Display", gi.get("display", "Analog")),
              ("Country of Origin", "Japan")] if kind == "watch" else \
+            [("Brand", gi["brand"]), ("Model", gi.get("code", model)), ("Type", "Point & Shoot"), ("Format", "35mm"),
+             ("Color", color or "As Pictured")] if kind == "film" else \
             [("Brand", gi["brand"]), ("Model", model), ("Type", "Portable MiniDisc Player"),
              ("Color", color or "As Pictured")] if gi.get("kind") == "md" else [("Brand", gi["brand"]), ("Model", model), ("Platform", gi["platform"]),
                      ("Type", "Handheld System"), ("Region Code", "NTSC-J (Japan)"),
@@ -3222,6 +3229,13 @@ def yahoo_search(keyword, settings=None, max_price=None, max_items=500):
 # 設定シートB17で変えられる。説明文にもよく出る言葉（ケース・保護など）は入れない（まともな出品まで消えるため）
 SEARCH_EXCLUDE_DEFAULT = ["ジャンク", "部品取り", "パーツ取り", "動作未確認", "通電のみ", "通電確認のみ",
                           "ガラクタ", "訳あり", "訳アリ", "不動品", "電源入らない"]
+
+
+def title_exclude(exclude, query):
+    """設定の除外ワード。フィルムカメラは「フィルム」で外さない（2026/11/01）"""
+    if (game_info(query or "") or {}).get("kind") == "film":
+        return [w for w in exclude if w != "フィルム"]
+    return exclude
 
 
 def search_exclude_words(settings):
@@ -3440,7 +3454,7 @@ def discover():
                         or it["price"] < 500:   # 500円未満は読み取りミスか付属品（2026/10/28）
                     continue
                 seen.add(u)
-                if any(w in it["title"] for w in exclude) or reserved_reason(it["title"]):
+                if any(w in it["title"] for w in title_exclude(exclude, q)) or reserved_reason(it["title"]):
                     continue
                 q = kw if gi and (gi.get("exact") or (gi.get("alias") and gi.get("kind") and match_game(it["title"], kw))) \
                     else guess_query(it["title"])   # 機種別カテゴリならその機種。呼び名で分かる機種（2026/10/28追加分）もその機種
@@ -3476,7 +3490,7 @@ def discover():
                 if u in known or u in seen or not it["price"] or it["price"] > max_cost(settings):
                     continue
                 seen.add(u)
-                if any(w in it["title"] for w in exclude) or reserved_reason(it["title"]):
+                if any(w in it["title"] for w in title_exclude(exclude, q)) or reserved_reason(it["title"]):
                     continue
                 if seller_id(it.get("seller")) in excluded:   # 除外者リストの出品者
                     continue
