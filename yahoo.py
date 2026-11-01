@@ -2026,6 +2026,7 @@ def buyer_messages(M, gem=None):
             if g("Sender").lower() == "ebay" or not g("ItemID") or ext in have or my in have:
                 continue
             heads.append((g("MessageID"), ext, my, g("ItemID"), g("Sender"), g("Subject"), g("ReceiveDate")))
+        print(f"受信箱：{len(hr.findall('.//e:Messages/e:Message', ns))}件（返信まだ・商品あり {len(heads)}件）")
         for k in range(0, len(heads), 10):
             part = heads[k:k + 10]
             _, _, br = M.trading_call_root(
