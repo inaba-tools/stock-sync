@@ -420,8 +420,9 @@ INFO_JS = """() => {
     const sa = document.querySelector('a[href*="/shops/profile/"], a[href*="/user/profile/"]');   // 出品者（ショップ・個人）
     const sm = sa ? (sa.getAttribute('href') || '').match(/(?:shops|user)\\/profile\\/([^\\/?#]+)/) : null;
     const rv = sa ? (sa.getAttribute('aria-label') || '').match(/([\\d,]+)\\s*件のレビュー/) : null;   // 2026/11/01 出品者の評価の数
+    const sd = main.match(/発送までの日数\\s*([^\\n]+)/);   // 2026/11/01 「1~2日で発送」など
     return { title, price: m ? parseInt(m[1].replace(/,/g, ''), 10) : null, seller: sm ? sm[1] : '',
-             reviews: rv ? parseInt(rv[1].replace(/,/g, ''), 10) : null };
+             reviews: rv ? parseInt(rv[1].replace(/,/g, ''), 10) : null, ship_days: sd ? sd[1].trim() : '' };
 }"""
 
 # ---------- 仕入れ候補の利益計算 ----------
@@ -1286,11 +1287,43 @@ def main():
         yahoo.buyer_messages(sys.modules[__name__])   # 2026/11/01 買い手の質問の日本語訳と返信案（チェックで送信）
     except Exception as e:
         print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
+    try:   # 2026/11/01 30日たってもウォッチ0の出品は、自動更新（無料出品枠を1件使う）の前に終わらせる
+        end_stale()
+    except Exception as e:
+        print("売れない出品の終了でエラー:", type(e).__name__, str(e)[:150])
     try:   # 2026/11/01 14日たってもウォッチ0の出品のタイトルをAIで見直す（1件1回）
         import yahoo
         yahoo.retitle_slow(sys.modules[__name__])
     except Exception as e:
         print("タイトル見直しでエラー:", type(e).__name__, str(e)[:150])
+
+
+STALE_DAYS = 29     # 30日ごとの自動更新の少し前
+STALE_MAX = 10      # 1回で終わらせる上限（数え違いで大量に終わらせないため）
+
+
+def end_stale():
+    """2026/11/01 本人の希望：出品から29日以上たってウォッチ0の出品を終わらせ、無料出品枠を新しい候補に回す。
+    仕入れ先のURLは「履歴」に残るので、同じ商品はまた候補に入らない（同じ機種の別の出品は入る）"""
+    token = get_access_token()
+    act = ebay_active_items(token)
+    rows = sheet("list")["rows"]
+    ups = []
+    for r in rows:
+        iid = str(r.get("ebay_item_id") or "").strip()
+        a = act.get(iid)
+        if not a or a.get("watch") or (a.get("days") or 0) < STALE_DAYS or r.get("status") == "stopped":
+            continue
+        if len(ups) >= STALE_MAX:
+            break
+        ok, msg = stop_on_ebay(iid, token)
+        if ok:
+            ups.append({"row": r["row"], "status": "stopped",
+                        "result": f"出品から{int(a['days'])}日たってもウォッチ0のため、自動更新の前に終了（無料出品枠を空ける） → {msg}"})
+    if ups:
+        sheet("update", updates=ups)
+        print(f"売れない出品を終了：{len(ups)}件")
+    return len(ups)
 
 
 def _main():
@@ -1440,6 +1473,8 @@ def _main():
                 acc, acc_why = True, "除外者リストの出品者の商品"   # 出品中・候補ともに止める
             if not acc and (info or {}).get("reviews") == 0:
                 acc, acc_why = True, "取引実績のない出品者（評価0件）"   # 2026/11/01 本人の希望：全商品で外す（出品中・候補とも）
+            if not acc and slow_ship((info or {}).get("ship_days")):
+                acc, acc_why = True, "発送までの日数が4〜7日の出品"   # 2026/11/01 本人の希望：eBayの発送期限に間に合わないおそれ（出品中・候補とも）
             if not acc and reserved_reason(title_now):
                 acc_why = reserved_reason(title_now)   # 専用出品は買えないので候補・出品とも止める
                 acc = True
@@ -3189,7 +3224,8 @@ def check_yahoo(url):
     status = "on_sale" if st == "OPEN" else "sold" if st in ("SOLD", "CLOSED") else "unknown"
     _rt = ((j.get("seller") or {}).get("rating") or {}).get("total")
     info = {"title": j.get("title", ""), "price": j.get("price"), "seller": (j.get("seller") or {}).get("id", ""),
-            "reviews": int(_rt) if isinstance(_rt, (int, float)) else None}   # 2026/11/01 出品者の評価の数（読めなければ None）
+            "reviews": int(_rt) if isinstance(_rt, (int, float)) else None,   # 2026/11/01 出品者の評価の数（読めなければ None）
+            "ship_days": (j.get("deliverySchedule") or {}).get("text", "")}   # 2026/11/01 「1〜2日で発送」など
     detail = {"images": [i.get("url") for i in j.get("images", []) if i.get("url")][:12],
               "description": j.get("description", ""),
               "condition": (j.get("condition") or {}).get("text", ""),
@@ -3238,6 +3274,11 @@ def yahoo_search(keyword, settings=None, max_price=None, max_items=500):
 # 設定シートB17で変えられる。説明文にもよく出る言葉（ケース・保護など）は入れない（まともな出品まで消えるため）
 SEARCH_EXCLUDE_DEFAULT = ["ジャンク", "部品取り", "パーツ取り", "動作未確認", "通電のみ", "通電確認のみ",
                           "ガラクタ", "訳あり", "訳アリ", "不動品", "電源入らない"]
+
+
+def slow_ship(text):
+    """仕入れ先の「発送までの日数」が4〜7日なら True（2026/11/01 本人の希望。商品名や説明の言葉では判断しない。読めなければ False）"""
+    return bool(re.search(r"4\s*[~〜～\-－]\s*7\s*日", str(text or "")))
 
 
 def title_exclude(exclude, query):
