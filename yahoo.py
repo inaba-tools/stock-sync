@@ -1663,6 +1663,8 @@ def check_active_listings(M, per_run=5, settings=None):
         row = list(row) + [""] * (len(head) - len(row))
         if str(row[col["状態"]]).strip() not in ("active", "") or not str(row[col["eBay出品番号"]]).strip() or str(row[rc - 1]).strip():
             continue
+        if not str(row[col["商品仕入元URL"]]).strip().startswith("http"):
+            continue   # 2026/11/01 手元在庫（仕入れ先なし）はAIの確認・自動終了の対象にしない
         todo.append((i, row))
     if not todo:
         return

@@ -1303,6 +1303,80 @@ STALE_DAYS = 29     # 30日ごとの自動更新の少し前
 STALE_MAX = 10      # 1回で終わらせる上限（数え違いで大量に終わらせないため）
 
 
+HAND_PREFIX = "手元在庫"    # 無在庫商品リストの「商品仕入元URL」がこれで始まる行＝手元在庫（例：手元在庫:K-001）
+HAND_DROP_DAYS = 7          # 2026/11/01 本人決定：手元在庫は週1で約1,000円ずつ値下げ（下限は利益2,000円の値段）
+HAND_DROP_JPY = 1000
+
+
+def is_hand(r):
+    return str(r.get("mercari_url") or "").strip().startswith(HAND_PREFIX)
+
+
+def hand_stock(rows, sold_on_ebay, active_items, settings, token, updates):
+    """手元在庫の出品（仕入れ先なし）。送料は他の出品と同じ国ごとの送料にそろえ、
+    最終値下げから7日ごとに約1,000円下げる（利益2,000円の値段まで）。売れたら発送を知らせる。売れた件数を返す"""
+    sold = 0
+    for r in rows:
+        iid = str(r["ebay_item_id"]).strip()
+        q = (r.get("query") or "").strip()
+        try:
+            cost = float(str(r.get("cost") or 0).replace(",", "") or 0)
+        except ValueError:
+            cost = 0
+        upd = {"row": r["row"], "last_checked": now()}
+        if iid in sold_on_ebay:
+            s = sold_on_ebay[iid]
+            usd = f"${s['usd']:.2f}" if s.get("usd") else ""
+            upd["status"] = PENDING
+            if s.get("usd"):
+                upd["ebay_usd"] = s["usd"]
+                upd["profit"] = round(profit_from_total(s["usd"], cost, q, settings))
+            p_txt = f"・見込み利益 約{int(upd['profit']):,}円" if "profit" in upd else ""
+            upd["result"] = (f"🟢【発送】eBayで売れました（{usd}{p_txt}）。手元在庫なので発送してください。"
+                             "発送したら「仕入れた」にチェックを入れてください（売上シートに移ります）")
+            name = (r.get("title") or q)[:40]
+            alert(f"【発送】eBayで売れました {usd}｜{name}",
+                  f"{upd['result']}\n\n■ 手元在庫：{r['mercari_url']}\n■ eBay出品番号：{iid}")
+            sold += 1
+            updates.append(upd)
+            continue
+        act = active_items.get(iid)
+        if not act or act.get("price") is None:
+            continue   # 出品中でない（手で終了したなど）：何もしない
+        if "watch" in act:
+            upd["watch"] = act["watch"]
+        if act.get("days") is not None:
+            upd["days_listed"] = int(act["days"])
+        cur = act["price"]   # アメリカの人が払う合計（商品＋送料）
+        floor = floor_price_usd(cost, q, settings) if cost else cur
+        step = round(HAND_DROP_JPY / usd_jpy(settings), 2)
+        last = None
+        try:
+            last = datetime.strptime(str(r.get("last_drop") or "")[:16], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+        except ValueError:
+            pass
+        new = None
+        if last is None:
+            new = cur   # 初回：値段は変えず、送料を他の出品と同じ国ごとの送料（ツールの計算）に切り替える
+        elif (datetime.now(JST) - last).days >= HAND_DROP_DAYS and cur > floor + 0.01:
+            new = max(round(cur - step, 2), floor)
+        price = cur
+        if new is not None:
+            ack, errs = revise_price(iid, new, q, settings, token)
+            if ack in ("Success", "Warning"):
+                upd["last_drop"] = now()
+                price = new
+            else:
+                print("手元在庫の値段の変更に失敗:", iid, " / ".join(errs)[:200])
+        upd["profit"] = round(profit_from_total(price, cost, q, settings)) if cost else None
+        if upd["profit"] is None:
+            del upd["profit"]
+        upd["result"] = (f"販売中（手元在庫）合計${price:.2f}・週1で約{HAND_DROP_JPY:,}円値下げ"
+                         f"（下限${floor:.2f}＝利益約2,000円）" + ("・下限に到達" if price <= floor + 0.01 else ""))
+        updates.append(upd)
+    return sold
+
+
 def end_stale():
     """2026/11/01 本人の希望：出品から29日以上たってウォッチ0の出品を終わらせ、無料出品枠を新しい候補に回す。
     仕入れ先のURLは「履歴」に残るので、同じ商品はまた候補に入らない（同じ機種の別の出品は入る）"""
@@ -1313,8 +1387,8 @@ def end_stale():
     for r in rows:
         iid = str(r.get("ebay_item_id") or "").strip()
         a = act.get(iid)
-        if not a or a.get("watch") or (a.get("days") or 0) < STALE_DAYS or r.get("status") == "stopped":
-            continue
+        if not a or a.get("watch") or (a.get("days") or 0) < STALE_DAYS or r.get("status") == "stopped" or is_hand(r):
+            continue   # 手元在庫は終わらせない（週1の値下げで売る）
         if len(ups) >= STALE_MAX:
             break
         ok, msg = stop_on_ebay(iid, token)
@@ -1457,6 +1531,8 @@ def _main():
                 dup_seen.append(me)
 
         for r in targets:
+            if is_hand(r):
+                continue   # 2026/11/01 手元在庫は仕入れ先がないので、ここでは見ない（hand_stock で値下げ・売れた処理）
             yahoo = is_yahoo(r["mercari_url"])
             if yahoo:
                 status, info, ydetail = check_yahoo(r["mercari_url"])
@@ -1858,7 +1934,7 @@ def _main():
             print("同じ商品のため停止:", d["ebay_item_id"], "残した出品:", k["ebay_item_id"], msg)
 
         # ---- 「要仕入れ」の行：まだ仕入れていないうちに仕入れ先が売り切れたら知らせる ----
-        for r in [x for x in rows if x["status"] == PENDING and x.get("list") is not True]:
+        for r in [x for x in rows if x["status"] == PENDING and x.get("list") is not True and not is_hand(x)]:
             if "【確認】" in (r.get("result") or ""):
                 continue   # 一度知らせたものは繰り返さない
             try:
@@ -1877,6 +1953,11 @@ def _main():
                   f"{msg}\n\n■ 仕入れ先\n{r['mercari_url']}\n\n■ eBay出品番号：{r['ebay_item_id']}")
         browser.close()
 
+    try:   # 2026/11/01 手元在庫（自分で直した商品など）：週1で値下げ・売れたら発送の案内
+        sold_n += hand_stock([r for r in targets if is_hand(r) and r["ebay_item_id"]],
+                             sold_on_ebay, active_items, settings, token, updates)
+    except Exception as e:
+        print("手元在庫の処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
     sheet("update", updates=updates)
     try:
         sheet("cleanup")   # 止めた行（売り切れ・候補から外したもの・eBay終了済み）を「履歴」シートに移して削除
