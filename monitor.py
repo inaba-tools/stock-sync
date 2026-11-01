@@ -1081,6 +1081,32 @@ SHIP_TABLE = {   # 円（実際にかかる送料。アメリカは関税を除�
     "大": {"US": 5600, "CA_MX": 5300, "EU": 4000, "ASIA": 3400, "AU": 9500},   # ビデオカメラ
 }
 REGION_SHIP_PROFILE = "SpeedPAK by region"   # 国ごとの送料を入れる配送ポリシー（create_region_policy で作る）
+_ship_loaded = [False]
+
+
+def load_ship_table():
+    """2026/11/01 管理表の「送料表」シートの金額を使う（読めないとき・形が変なときは上の SHIP_TABLE のまま）"""
+    if _ship_loaded[0]:
+        return
+    _ship_loaded[0] = True
+    try:
+        vals = sheet("tab_get", name="送料表").get("values") or []
+        new = {}
+        for row in vals:
+            size = str(row[0] if row else "").strip()[:1]
+            if size in SHIP_TABLE and len(row) >= 6:
+                nums = [float(re.sub(r"[^\d.]", "", str(v)) or 0) for v in row[1:6]]
+                if all(n >= 500 for n in nums):
+                    new[size] = dict(zip([n for n, _ in SHIP_REGIONS], nums))
+        if set(new) == set(SHIP_TABLE):
+            diff = [f"{s}{r}:{SHIP_TABLE[s][r]:.0f}→{new[s][r]:.0f}" for s in new for r in new[s] if new[s][r] != SHIP_TABLE[s][r]]
+            if diff:
+                print("送料表シートの金額を使います（プログラムの金額と違う所：", ", ".join(diff), "）")
+            SHIP_TABLE.update(new)
+        else:
+            print("送料表シートが読めない形だったので、プログラムの金額を使います")
+    except Exception as e:
+        print("送料表シートを読めませんでした（プログラムの金額を使います）:", str(e)[:80])
 
 
 def ship_size(model=""):
@@ -1242,6 +1268,7 @@ def main():
 
 def _main():
     data = sheet("list")
+    load_ship_table()
     rows, settings = data["rows"], data.get("settings", {})
     excluded = excluded_sellers(data)   # 「除外者リスト」シートの出品者（この人の商品は候補にも出品にもしない）
     KNOWN_MODELS[:] = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "")) if k.strip()]
@@ -3193,6 +3220,32 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
     return best
 
 
+# ---------- 値引き候補（2026/11/01） ----------
+NEGO_MAX_PCT = 0.15     # 今の値段から最大15%引きまで
+NEGO_MIN_SOLD90 = 20    # eBayで90日に20台以上売れている機種だけ
+
+
+def nego_check(nego, u, it, q, sale, p, need, settings):
+    """利益が少し足りない出品 → 値引きをお願いすれば利益 need 円が残るなら nego に追加"""
+    if "/shops/product/" in u or SOLD90_BY_KEY.get(model_key(q), 0) < NEGO_MIN_SOLD90:
+        return
+    title = it.get("title") or ""
+    if junk_reason(title) or no_body_reason(title) or reserved_reason(title):
+        return
+    price = int(it["price"])
+    ask = int((price - (need - p)) // 10 * 10)   # 利益は仕入れ値が1円下がると1円増える
+    if ask <= 0 or (price - ask) / price > NEGO_MAX_PCT:
+        return
+    p2, _ = profit(ask, sale, settings, q)
+    while p2 < need and (price - ask) / price <= NEGO_MAX_PCT:
+        ask -= 10
+        p2, _ = profit(ask, sale, settings, q)
+    if p2 < need or (price - ask) / price > NEGO_MAX_PCT:
+        return
+    nego.append({"model": q, "title": title, "url": u, "src": source_name(u), "price": price, "ask": ask,
+                 "profit": int(p2), "sold90": SOLD90_BY_KEY.get(model_key(q), 0)})
+
+
 _mon_check = {"t": 0, "busy": False}
 
 
@@ -3225,6 +3278,7 @@ def discover():
     except Exception as e:
         print("トークンの期限の確認に失敗:", str(e)[:100])
     data = sheet("list")
+    load_ship_table()
     settings = data.get("settings", {})
     known = {r["mercari_url"].split("?")[0] for r in data["rows"]}
     # 一度候補から外して「履歴」に移した商品も飛ばす（2026/10/28：同じジャンク品が毎回拾われ、追加の枠を取っていたため）
@@ -3232,7 +3286,8 @@ def discover():
     keywords = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "ガラケー")) if k.strip()]
     KNOWN_MODELS[:] = keywords
     min_margin = 0   # 2026/10/22 利益率の条件はやめて、利益2,000円以上かどうかだけで判断する（設定シートB13は使わない）
-    min_profit = float(settings.get("min_profit") or 1500)
+    min_profit = float(settings.get("min_profit") or 2000)   # 設定シートB14（2026/11/01 読めないときの値も2,000円に）
+    nego = []   # 2026/11/01 値引き候補（利益が少し足りない出品）
     # シートへの追加は20件に限らない（出品の件数は見張り側で1回B15件まで）。ただし出品待ちの候補が多すぎると見張りが遅れるので、
     # 出品待ちはシート全体で CANDIDATE_POOL_MAX 件まで（4本で分ける）。追加できなかった候補は、次の回にまた見つかる
     pending = sum(1 for r in data["rows"] if not r.get("ebay_item_id") and r.get("status") in ("", "active"))
@@ -3303,6 +3358,8 @@ def discover():
                 if game_info(q) and game_reject_reason(it["title"], q, it["price"], sale, settings):
                     continue   # ゲーム機は商品名で本体かどうかを厳しく確認
                 p, rate = profit(it["price"], sale, settings, q)
+                if p < max(min_profit, min_profit_for(0, settings, q)):
+                    nego_check(nego, u, it, q, sale, p, max(min_profit, min_profit_for(0, settings, q)), settings)
                 if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
@@ -3338,14 +3395,29 @@ def discover():
                 if game_info(q) and game_reject_reason(it["title"], q, it["price"], sale, settings):
                     continue
                 p, rate = profit(it["price"], sale, settings, q)
+                if p < max(min_profit, min_profit_for(0, settings, q)):
+                    nego_check(nego, u, it, q, sale, p, max(min_profit, min_profit_for(0, settings, q)), settings)
                 if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
                                   "profit": p, "margin": rate, "memo": "自動発見（Yahoo!フリマ）",
                                   "result": f"自動発見 {now()}"})
             time.sleep(random.uniform(4, 7))   # メルカリに止められないよう、検索ごとに少し待つ
+        flea = None
+        if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 フリマの修理用ジャンク・値引き候補の売り切れ確認（1本目だけ・ブラウザを使い回す）
+            try:
+                import yahoo
+                flea = yahoo.flea_junk(sys.modules[__name__], data, page)
+            except Exception as e:
+                print("フリマのジャンク探しでエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
         browser.close()
     save_market_cache()
+    if nego:   # 2026/11/01 値引き候補シートに追加（メールは1本目のヤフオクの回でまとめて送る）
+        try:
+            import yahoo
+            yahoo.nego_add(sys.modules[__name__], nego)
+        except Exception as e:
+            print("値引き候補の追加でエラー:", type(e).__name__, str(e)[:150])
 
     # よく売れる機種を優先し、同じ機種は（出品中＋候補で）3件までにする
     per_model = {}
@@ -3370,7 +3442,7 @@ def discover():
     if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 ヤフオク仕入れ（1本目だけ。失敗しても候補さがしは止めない）
         try:
             import yahoo
-            yahoo.run(sys.modules[__name__], data, "discover")
+            yahoo.run(sys.modules[__name__], data, "discover", flea=flea)
             yahoo.weekly_rank_market(sys.modules[__name__], data)
         except Exception as e:
             print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
