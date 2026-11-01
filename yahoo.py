@@ -1035,7 +1035,8 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
         rank = str(ans.get("rank") or "").strip().upper()
         note = str(ans.get("note") or ans.get("reason") or "")[:40]
         _judged["stock:" + aid] = [rank, note, datetime.now(JST).strftime("%Y-%m-%d")]
-        if ans.get("ok") is False or rank == "ジャンク":
+        if ans.get("ok") is False or rank == "ジャンク" or \
+                re.search(r"本体ではなく|本体ではない|のみの(商品|出品)|パーツのみ|型番違い|ポスター|箱のみ|説明書のみ", note):
             cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], f"AI：{ans.get('reason') or note}（{rank}）")]
             continue
         if rank not in ("S", "A", "B", "C"):
