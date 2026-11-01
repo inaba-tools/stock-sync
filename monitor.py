@@ -1378,6 +1378,36 @@ def hand_stock(rows, sold_on_ebay, active_items, settings, token, updates):
     return sold
 
 
+HAND_COLS = {"mercari_url": "商品仕入元URL", "ebay_item_id": "eBay出品番号", "status": "状態", "query": "検索語",
+             "cost": "仕入れ値(円)", "last_drop": "最終値下げ", "title": "商品名", "last_checked": "最終チェック",
+             "result": "結果", "profit": "想定利益(円)", "watch": "ウォッチ数", "days_listed": "出品日数"}
+
+
+def hand_stock_tab(sold_on_ebay, active_items, settings, token):
+    """管理表の読み込み（list）は仕入れ先URLのない行を返さないので、手元在庫の行はシートを直接読んで処理する"""
+    import yahoo as ymod
+    tabs = ymod.Tabs(sys.modules[__name__])
+    vals = tabs.get("無在庫商品リスト")
+    if not vals:
+        return 0
+    head = [str(h).strip() for h in vals[0]]
+    col = {k: head.index(h) for k, h in HAND_COLS.items() if h in head}
+    rows = []
+    for i, v in enumerate(vals[1:], start=2):
+        v = list(v) + [""] * (len(head) - len(v))
+        r = {k: v[c] for k, c in col.items()}
+        r["row"] = i
+        r["ebay_item_id"] = str(r.get("ebay_item_id") or "").strip()
+        if is_hand(r) and r["ebay_item_id"] and str(r.get("status") or "").strip() in ("", "active"):
+            rows.append(r)
+    ups = []
+    sold = hand_stock(rows, sold_on_ebay, active_items, settings, token, ups)
+    cells = [(u["row"], col[k] + 1, val) for u in ups for k, val in u.items() if k in col and val is not None]
+    if cells:
+        tabs.set("無在庫商品リスト", cells)
+    return sold
+
+
 def end_stale():
     """2026/11/01 本人の希望：出品から29日以上たってウォッチ0の出品を終わらせ、無料出品枠を新しい候補に回す。
     仕入れ先のURLは「履歴」に残るので、同じ商品はまた候補に入らない（同じ機種の別の出品は入る）"""
@@ -1955,8 +1985,7 @@ def _main():
         browser.close()
 
     try:   # 2026/11/01 手元在庫（自分で直した商品など）：週1で値下げ・売れたら発送の案内
-        sold_n += hand_stock([r for r in targets if is_hand(r) and r["ebay_item_id"]],
-                             sold_on_ebay, active_items, settings, token, updates)
+        sold_n += hand_stock_tab(sold_on_ebay, active_items, settings, token)
     except Exception as e:
         print("手元在庫の処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
     sheet("update", updates=updates)
