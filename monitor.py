@@ -1316,6 +1316,7 @@ def hand_stock(rows, sold_on_ebay, active_items, settings, token, updates):
     """手元在庫の出品（仕入れ先なし）。送料は他の出品と同じ国ごとの送料にそろえ、
     最終値下げから7日ごとに約1,000円下げる（利益2,000円の値段まで）。売れたら発送を知らせる。売れた件数を返す"""
     sold = 0
+    print(f"手元在庫：{len(rows)}件", [(str(r['ebay_item_id']), str(r['ebay_item_id']).strip() in active_items) for r in rows])
     for r in rows:
         iid = str(r["ebay_item_id"]).strip()
         q = (r.get("query") or "").strip()
