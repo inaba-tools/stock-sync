@@ -1260,6 +1260,7 @@ def main():
         import yahoo
         yahoo.run(sys.modules[__name__], {"settings": {}}, "soon")
         yahoo.check_active_listings(sys.modules[__name__])
+        yahoo.buyer_messages(sys.modules[__name__])   # 2026/11/01 買い手の質問の日本語訳と返信案（チェックで送信）
     except Exception as e:
         print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
 
@@ -2947,6 +2948,27 @@ def create_listing(r, info, detail, settings, token):
             cond_en = yahoo.condition_text_en(ai["rank"], ai.get("note_en", ""), cond_en)
         except Exception:
             pass
+    # 2026/11/01 AIが写真と説明文から作った英語タイトル・箇条書き・色・付属品・SIMフリーを使う（確かめてだめなら今まで通り）
+    if ai:
+        try:
+            import yahoo
+            title_en = yahoo.ai_title(ai, model, title_en)
+            if not color and ai.get("color_en"):
+                color = ai["color_en"].title()
+            if ai.get("sim_unlocked") and not unlocked:
+                unlocked = True
+                desc_html = desc_html.replace("Not stated by the original seller. Please check compatibility before purchase.", "Unlocked")
+            bullets = ai.get("highlights_en") or []
+            inc = ai.get("included_en") or []
+            if inc:
+                bullets = bullets + [f"Included: {', '.join(inc)} (only the items shown in the photos)"]
+            if bullets:
+                block = "<h3>Item details</h3><ul>" + "".join(f"<li>{escape(b)}</li>" for b in bullets) + "</ul>"
+                desc_html = re.sub(r"<h2>.*?</h2>", f"<h2>{escape(title_en)}</h2>", desc_html, count=1)
+                desc_html = desc_html.replace("<h3>Notes from the original Japanese description", block + "<h3>Notes from the original Japanese description", 1) \
+                    if "<h3>Notes from the original Japanese description" in desc_html else desc_html.replace("<p>Ships from Japan.", block + "<p>Ships from Japan.", 1)
+        except Exception as e:
+            print("AIのタイトル・説明の反映でエラー（今まで通り）:", type(e).__name__, str(e)[:80])
     gi = game_info(model)
     if gi:
         category_id = gi.get("ebay_cat", GAME_EBAY_CATEGORY)
@@ -2975,6 +2997,8 @@ def create_listing(r, info, detail, settings, token):
         # eBay必須：Color と Storage Capacity
         specifics.append(("Color", color or "As Pictured"))
         specifics.append(("Storage Capacity", storage_of(model)))
+    if ai.get("included_en"):   # 付属品（写真に写っているもの）
+        specifics.append(("Included", ", ".join(ai["included_en"])[:65]))
     nvl = "".join(f"<NameValueList><Name>{escape(n)}</Name><Value>{escape(v)}</Value></NameValueList>" for n, v in specifics)
     if region_ship_on("new"):   # 国ごとの送料：商品の値段は送料・関税を除いた分
         list_item_price = round(item_from_total(price, model, settings), 2)

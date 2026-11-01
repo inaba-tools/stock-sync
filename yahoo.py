@@ -529,7 +529,12 @@ LISTING_PROMPT = """中古品をeBayに出品する前の確認です。日本�
 状態ランク：S=新品同様・使用感なし／A=キズほぼなし／B=使用感・小キズあり／C=目立つキズ・色あせ・欠け／ジャンク=故障。写真を優先して厳しめに付ける。
 答えの形：{{"ok":true/false,"reason":"出品しない理由（ok=falseのとき・30字以内）","rank":"S/A/B/C/ジャンク",
 "color_in_photo":"写真の本体の色","note":"気になる点（30字以内・日本語）",
-"note_en":"海外の買い手向けの状態の説明（英語・150字以内。写真から分かるキズや使用感を正直に）"}}
+"note_en":"海外の買い手向けの状態の説明（英語・150字以内。写真から分かるキズや使用感を正直に）",
+"title_en":"eBay用の英語タイトル（80文字以内。ブランド・型番・色・Japan・目立つ特徴や付属品を、海外の人が検索する言葉で。誇張しない）",
+"highlights_en":["英語の箇条書き（3〜5個。状態・付属品・動作確認の記載など、写真と説明文から確かなことだけ）"],
+"color_en":"本体の色（英語1〜2語）","included_en":["写真に写っている付属品（英語。Battery, Charger, Box, Manual, Strap など。本体は含めない）"],
+"sim_unlocked":"説明文にSIMフリー・SIMロック解除済みと書いてあれば true、書いていなければ null"}}
+英語の項目は、説明文と写真から確かなことだけを書く。分からないことは書かない。
 ok=false にするのは：状態の申告と写真が明らかに違う／タイトルと写真の色が違う／背面などに大きなダメージ／本体が写っていない・本体なしに見える／ジャンク・故障の記載 のどれか。"""
 
 RANK_PROMPT = """eBayで売られている中古品（{model}）の写真と説明文から、状態ランクをJSONだけで答えてください。
@@ -1300,8 +1305,25 @@ def listing_gate(M, r, info, detail, settings=None):
             print("状態別の相場の確認でエラー（今まで通り出品）:", type(e).__name__, str(e)[:80])
     _list_cells(gem.tabs, r.get("row"), rank, note, raw)
     LAST_AI[r.get("mercari_url", "")] = {"rank": rank, "note": note, "note_en": str(ans.get("note_en") or "")[:300],
-                                         "usd": usd}
+                                         "usd": usd, "title_en": str(ans.get("title_en") or "").strip(),
+                                         "highlights_en": [str(x)[:200] for x in (ans.get("highlights_en") or []) if str(x).strip()][:5],
+                                         "color_en": str(ans.get("color_en") or "").strip()[:30],
+                                         "included_en": [str(x)[:30] for x in (ans.get("included_en") or []) if str(x).strip()][:8],
+                                         "sim_unlocked": ans.get("sim_unlocked") is True}
     return None
+
+
+def ai_title(ai, model, fallback):
+    """AIのタイトルを使ってよいか確かめる（80文字以内・型番が入っている・おかしな文字がない）。だめなら今までのタイトル"""
+    t = re.sub(r"\s+", " ", str((ai or {}).get("title_en") or "")).strip()
+    if not t or len(t) > 80 or not t.isascii():
+        return fallback
+    key = re.sub(r"[^A-Z0-9]", "", str(model).upper())
+    if key and key not in re.sub(r"[^A-Z0-9]", "", t.upper()):
+        return fallback
+    if re.search(r"\b(NEW|MINT|PERFECT|L@@K)\b", t.upper()) and (ai or {}).get("rank") != "S":
+        return fallback   # 誇張した言葉は使わない
+    return t
 
 
 def condition_text_en(rank, note_en, declared_en=""):
@@ -1680,3 +1702,82 @@ def flea_junk(M, data, page):
     return {"rows": rows, "cells": cells, "tabs": tabs, "gem": gem}
 
 
+
+
+# ---------------------------------------------------------------- 買い手メッセージの返信案（2026/11/01）
+BUYER = "買い手メッセージ"
+BUYER_HEAD = ["受信日時", "商品", "eBay出品番号", "買い手", "質問（英語）", "質問（日本語訳）", "返信案（英語）",
+              "返信案（日本語訳）", "送る", "状態", "メッセージID"]
+REPLY_PROMPT = """あなたは日本からeBayに中古品を出品しているお店です。買い手からの質問に答える返信案を作ってください。JSONだけで答えてください。
+お店の決まり：日本から発送（追跡番号付き）。日本国内の住所には発送できない。商品は写真に写っているものだけが付属。値引きの交渉には応じない。
+分からないこと・確かめないと言えないことは約束せず「確認してお知らせします」と書く。丁寧で短い英語にする。
+商品名：{title}
+出品ページの状態の説明：{cond}
+買い手の質問：{q}
+答えの形：{{"question_ja":"質問の日本語訳","reply_en":"返信案（英語・600字以内）","reply_ja":"返信案の日本語訳"}}"""
+
+
+def buyer_messages(M, gem=None):
+    """まだ返信していない買い手の質問を「買い手メッセージ」シートに並べ、日本語訳と返信案を付ける。
+    「送る」にチェックが入った行は、返信案（英語の欄。書き換えていればそちら）をeBayで送る"""
+    tabs = Tabs(M)
+    try:
+        tabs.ensure(BUYER, BUYER_HEAD)
+    except Exception:
+        return
+    vals = tabs.get(BUYER, fresh=True)
+    have = {str(r[10]).strip() for r in vals[1:] if len(r) > 10}
+    token = M.get_access_token()
+    cells = []
+    # ① チェックが入った行を送る
+    for i, r in enumerate(vals[1:], start=2):
+        r = list(r) + [""] * (len(BUYER_HEAD) - len(r))
+        if str(r[8]).upper() == "TRUE" and str(r[9]).strip() not in ("送信済み",) and str(r[6]).strip():
+            body = str(r[6]).strip()
+            ack, errs, _ = M.trading_call_root(
+                "AddMemberMessageRTQ",
+                f"<ItemID>{_xml(r[2])}</ItemID><MemberMessage><Body>{_xml(body)}</Body>"
+                f"<ParentMessageID>{_xml(r[10])}</ParentMessageID><RecipientID>{_xml(r[3])}</RecipientID>"
+                "</MemberMessage>", token)
+            ok = ack in ("Success", "Warning")
+            cells.append((i, 10, "送信済み" if ok else f"送れませんでした：{' / '.join(errs)[:80]}"))
+    # ② 新しい質問を取ってくる（3日以内・未返信）
+    now = datetime.now(JST)
+    try:
+        ack, errs, root = M.trading_call_root(
+            "GetMemberMessages",
+            "<MailMessageType>AskSellerQuestion</MailMessageType><MessageStatus>Unanswered</MessageStatus>"
+            f"<StartCreationTime>{(now - timedelta(days=3)).astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</StartCreationTime>"
+            f"<EndCreationTime>{now.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</EndCreationTime>", token)
+    except Exception as e:
+        print("買い手メッセージの取得でエラー:", type(e).__name__, str(e)[:80])
+        root = None
+    rows = []
+    ns = M.NS
+    for ex in (root.findall(".//e:MemberMessageExchange", ns) if root is not None else []):
+        mid = ex.findtext("e:Question/e:MessageID", default="", namespaces=ns)
+        if not mid or mid in have:
+            continue
+        item_id = ex.findtext("e:Item/e:ItemID", default="", namespaces=ns)
+        title = ex.findtext("e:Item/e:Title", default="", namespaces=ns)
+        sender = ex.findtext("e:Question/e:SenderID", default="", namespaces=ns)
+        q = ex.findtext("e:Question/e:Body", default="", namespaces=ns)
+        when = ex.findtext("e:CreationDate", default="", namespaces=ns) or ex.findtext("e:Question/e:CreationDate", default="", namespaces=ns)
+        cond = ""
+        try:
+            _, _, ir = M.trading_call_root("GetItem", f"<ItemID>{item_id}</ItemID><OutputSelector>ConditionDescription</OutputSelector>", token)
+            cond = ir.findtext(".//e:ConditionDescription", default="", namespaces=ns) or ""
+        except Exception:
+            pass
+        gem = gem or Gemini(tabs)
+        ans = gem.ask(1, REPLY_PROMPT.format(title=title, cond=cond[:600], q=q[:1500])) if gem.available(1) else None
+        d = to_dt(when)
+        rows.append([d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else now.strftime("%Y/%m/%d %H:%M"), title[:60], item_id, sender,
+                     q[:1500], (ans or {}).get("question_ja", "（AIが使えないため訳なし）"),
+                     (ans or {}).get("reply_en", ""), (ans or {}).get("reply_ja", ""), False, "未送信", mid])
+        have.add(mid)
+    if cells:
+        tabs.set(BUYER, cells)
+    if rows:
+        tabs.append(BUYER, rows)
+    print(f"買い手メッセージ：新しい質問{len(rows)}件／送信{sum(1 for c in cells if c[2] == '送信済み')}件")
