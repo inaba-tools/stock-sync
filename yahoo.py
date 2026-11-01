@@ -1335,7 +1335,7 @@ def check_active_listings(M, per_run=5, settings=None):
     todo = []
     for i, row in enumerate(vals[1:], start=2):
         row = list(row) + [""] * (len(head) - len(row))
-        if str(row[col["状態"]]) != "active" or not str(row[col["eBay出品番号"]]).strip() or str(row[rc - 1]).strip():
+        if str(row[col["状態"]]).strip() not in ("active", "") or not str(row[col["eBay出品番号"]]).strip() or str(row[rc - 1]).strip():
             continue
         todo.append((i, row))
     if not todo:
