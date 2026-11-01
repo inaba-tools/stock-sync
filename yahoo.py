@@ -1220,6 +1220,8 @@ PART_GROUPS = [{"902KC", "903KC"}]
 def _same_parts(a, b):
     return a == b or any(a in g and b in g for g in PART_GROUPS)
 JUNK_MAX = 2000            # 1台の上限（送料込み）。設定シートに「ジャンクの上限」があればそちら
+PINK_JUNK_MAX = 5000       # 2026/11/01 本人の希望：ピンクの902KC・903KCのジャンクだけ上限5,000円（設定「ピンクのジャンクの上限」があればそちら）
+PINK_SEEN_FILE = os.path.join(".cache", "pink_seen.json")   # ピンクのお知らせを送った出品（1つの出品につき1回だけ）
 JUNK_PROFIT_MIN = 2000     # 提案する見込み利益の下限（ジャンクの利益ライン）
 PART_NAMES = ["外装（表）", "外装（裏）", "メイン液晶", "サブ液晶", "基板", "キー", "ヒンジ", "充電口", "バッテリー", "カメラ"]
 EXTERIOR = ("外装（表）", "外装（裏）")
@@ -1243,7 +1245,7 @@ COMBO_PROMPT = """あなたはガラケーの修理のプロです。日本の�
 def _mercari_junk(M, page, q, cat, price_max):
     url = ("https://jp.mercari.com/search?status=on_sale&sort=created_time&order=desc"
            + (f"&category_id={cat}" if cat else "") + "&keyword=" + requests.utils.quote(q)
-           + f"&price_max={int(price_max)}" + M.MERCARI_FIXED.split("&item_condition_id")[0])   # 通常出品のみ（状態は全部）
+           + (f"&price_max={int(price_max)}" if price_max else "") + M.MERCARI_FIXED.split("&item_condition_id")[0])   # 通常出品のみ（状態は全部）
     page.goto(url, wait_until="domcontentloaded", timeout=45000)
     try:
         page.wait_for_selector('a[href*="/item/m"], a[href*="/shops/product/"]', timeout=25000)
@@ -1379,6 +1381,10 @@ def junk_combo(M, data, page):
     calc = Calc(settings, smap)
     gem = Gemini(tabs)
     limit = sget(smap, "ジャンクの上限", JUNK_MAX) or JUNK_MAX
+    pink_limit = sget(smap, "ピンクのジャンクの上限", PINK_JUNK_MAX) or PINK_JUNK_MAX
+
+    def lim(model, color):
+        return pink_limit if (color == "ピンク" and str(model).upper() in PINK_MODELS) else limit
     tabs.ensure(COMBO, COMBO_HEAD)
     vals = tabs.get(COMBO, fresh=True)
     units = [_unit(r) for r in vals[1:] if len(r) > CI["ID"] and str(r[CI["ID"]]).strip().startswith("http")]
@@ -1403,19 +1409,28 @@ def junk_combo(M, data, page):
                 u["最終確認"] = now_s()
                 if price:
                     u["price"] = int(price)
-                    if u["price"] > limit:
+                    if u["price"] > lim(u["機種"], u["色"]):
                         continue
             time.sleep(1)
         keep.append(u)
     units = keep
 
-    # ---- 新しいジャンクをさがす（機種名・愛称で、2,000円以下）
+    # ---- 新しいジャンクをさがす（機種名・愛称で、2,000円以下。ピンクの902KC・903KCは値段に関係なく探してお知らせ）
     opened, added = 0, 0
+    try:
+        with open(PINK_SEEN_FILE) as f:
+            pink_seen = set(json.load(f))
+    except (OSError, ValueError):
+        pink_seen = set()
+    pink_new = []
     for model, names in JUNK_MODELS.items():
         items = []
-        for q in names:
+        qs = [(q, limit) for q in names]
+        if model.upper() in PINK_MODELS:
+            qs += [(f"{q} ピンク", None) for q in names]   # ピンクは上限なしで探す（お知らせ用）
+        for q, pmax in qs:
             try:
-                items += _mercari_junk(M, page, q, "", limit)
+                items += _mercari_junk(M, page, q, "", pmax)
             except Exception as e:
                 print("メルカリのジャンク検索に失敗:", q, type(e).__name__)
             try:
@@ -1425,7 +1440,7 @@ def junk_combo(M, data, page):
             time.sleep(2)
         for it in items:
             u = it["url"].split("?")[0]
-            if u in known or not it.get("price") or int(it["price"]) > limit:
+            if not it.get("price"):
                 continue
             t = unicodedata.normalize("NFKC", it.get("title") or "")
             if _model_of(t) != model or M.reserved_reason(t) or NOT_ITEM.search(t):
@@ -1435,6 +1450,11 @@ def junk_combo(M, data, page):
             if M.looks_like_accessory(t) and not any(w in t for w in M.BODY_WORDS):
                 continue
             color = color_of(t)
+            if color == "ピンク" and model.upper() in PINK_MODELS and u not in pink_seen:
+                pink_seen.add(u)
+                pink_new.append(f"・[{it['src']}] {model} {int(it['price']):,}円 {t[:40]}\n  {u}")
+            if u in known or int(it["price"]) > lim(model, color):
+                continue
             if color == "複数色" or opened >= FLEA_DETAIL_MAX:
                 continue
             known.add(u)
@@ -1464,6 +1484,15 @@ def junk_combo(M, data, page):
                                 str(ans.get("note") or "")[:40], "", it["src"], now_s(), now_s(), u]))
             added += 1
     save_judged()
+    if pink_new:   # 2026/11/01 本人の希望：ピンクの902KC・903KCが出たら、ジャンクでも値段に関係なくすぐメール
+        M.alert(f"【ピンク】902KC・903KCが{len(pink_new)}件出ました", "\n".join(pink_new)
+                + "\n\n購入はご自身で（自動では買いません）。ジャンクは5,000円以下ならジャンク組み合わせシートにも入ります。")
+    try:
+        os.makedirs(".cache", exist_ok=True)
+        with open(PINK_SEEN_FILE, "w") as f:
+            json.dump(sorted(pink_seen)[-3000:], f)
+    except OSError:
+        pass
 
     # ---- 組み合わせを作り直してシートを書き直す
     for u in units:
