@@ -705,8 +705,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
         except ValueError:
             t_cost = 0
         cap = calc.cap(sale, it.get("ship") or 0, t_cost)
-        return cap, (f"部品取り→{target[0]}（{target[1]} {target[2]}）を直す／[{t_rank}]相場{int(sale):,}円（{why}）"
-                     f"−相手の仕入{int(t_cost):,}円／上限{cap:,}円"), True
+        return cap, (f"部品取り→{target[0]}（{target[1]} {target[2]}）を直す／相手の仕入{int(t_cost):,}円"), True
     if any(not any(f in b for f in ok_fix) for b in broken if b):
         return None, "直す範囲外の故障：" + "・".join(broken)[:30], True
     need = ans.get("needed_parts") or broken
@@ -715,8 +714,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
     if not sale:
         return None, "相場不足", True
     cap = calc.cap(sale, it.get("ship") or 0, pc)
-    memo = (f"{note_ext}{'・'.join(broken) or '故障'}→部品{int(pc):,}円{('（' + pnote + '）') if pnote else ''}／"
-            f"外装[{rank}]→相場{int(sale):,}円（{why}）／上限{cap:,}円")
+    memo = (f"{note_ext}{'・'.join(broken) or '故障'}→部品{int(pc):,}円{('（' + pnote + '）') if pnote else ''}")
     return cap, memo, True
 
 
@@ -1050,7 +1048,7 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
             if sale and price and calc.profit(sale, price) < calc.min_profit:
                 cells += [(i, COL["状態"], "見送り"),
-                          (i, COL["メモ"], f"状態の相場{int(sale):,}円では今の値段で利益{int(calc.min_profit):,}円が残らない")]
+                          (i, COL["メモ"], f"今の値段だと利益{int(calc.min_profit):,}円が残らない")]
             continue
         try:
             d = y_item(aid)
@@ -1077,14 +1075,14 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             continue
         sale, why = sale_for(M, tabs, model, color, rank, settings)
         if not sale:
-            cells += [(i, COL["eBay相場"], ""), (i, COL["メモ"], f"[{rank}]相場不足（{why}）")]
+            cells += [(i, COL["eBay相場"], ""), (i, COL["メモ"], "eBayの売れた値段のデータが足りない")]
             continue
         cells += [(i, COL["eBay相場"], round(sale)), (i, COL["状態ランク"], f"[{rank}]"), (i, COL["状態説明"], ("AI：" + note)[:40]),
-                  (i, COL["メモ"], f"[{rank}]相場{int(sale):,}円（{why}）")]
+                  (i, COL["メモ"], "")]
         price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
         if price and calc.profit(sale, price) < calc.min_profit:   # 状態の相場だと今の値段でも利益が足りない → 見送り
             cells += [(i, COL["状態"], "見送り"),
-                      (i, COL["メモ"], f"[{rank}]相場{int(sale):,}円では今の値段で利益{int(calc.min_profit):,}円が残らない（{why}）")]
+                      (i, COL["メモ"], f"今の値段だと利益{int(calc.min_profit):,}円が残らない")]
     save_judged()
     if cells:
         tabs.set(TAB, cells)
@@ -1207,7 +1205,7 @@ def consider(M, tabs, gem, calc, settings, it, kw, genre):
             return None
         base.update({"用途": "在庫", "状態ランク": f"[{rank}]", "状態説明": f"出品者の申告：{COND_NAME.get(it['cond'], '')}" + ("・即決" if it["fixed"] else ""),
                      "相場": round(sale), "上限": None,
-                     "メモ": f"[{rank}]相場{int(sale):,}円（{why}）" + ("／送料不明→1,000円で計算" if ship is None else "")})
+                     "メモ": "送料不明→1,000円で計算" if ship is None else ""})
         return base
     # ---- ジャンク：NGの記載は外す（ピンクの902KC/903KCだけ「充電できない」はOK）
     if NG_ALWAYS.search(t):
