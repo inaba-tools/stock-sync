@@ -42,7 +42,7 @@ JST = ZoneInfo("Asia/Tokyo")
 
 
 def now():
-    return datetime.now(JST).strftime("%Y-%m-%d %H:%M")
+    return datetime.now(JST).strftime("%Y/%m/%d %H:%M")   # 2026/11/1 本人の希望：日付は全部 2026/11/01 22:51 の形
 
 
 def notify(msg):
@@ -1353,7 +1353,7 @@ def hand_stock(rows, sold_on_ebay, active_items, settings, token, updates):
         step = round(HAND_DROP_JPY / usd_jpy(settings), 2)
         last = None
         try:
-            last = datetime.strptime(str(r.get("last_drop") or "")[:16], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+            last = datetime.strptime(str(r.get("last_drop") or "").replace("/", "-")[:16], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
         except ValueError:
             pass
         new = None
@@ -1673,7 +1673,7 @@ def _main():
                                 pass
                         hours_since_drop = None   # 前回の値下げからの時間（T列「最終値下げ」から読む）
                         try:
-                            last = datetime.strptime(str(r.get("last_drop") or "")[:16], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+                            last = datetime.strptime(str(r.get("last_drop") or "").replace("/", "-")[:16], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
                             hours_since_drop = (datetime.now(JST) - last).total_seconds() / 3600 + 0.1
                         except ValueError:
                             pass
