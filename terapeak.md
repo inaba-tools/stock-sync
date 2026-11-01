@@ -8,12 +8,13 @@
 - 列：機種／色／状態ランク＝売れた値段／安い（下から25%）／ふつう（真ん中）／高い（上から25%）／件数（90日に売れた台数）／最終更新（`2026-11-01 20:00` の形）／根拠
 - 金額は円（送料込みの売れた値段×その日のドル円）。ドル円は https://api.frankfurter.dev/v1/latest?from=USD&to=JPY
 - 色：902KC だけ「ピンク」の行と、色なし（ピンク以外）の行を分ける。ほかは色なしの1行
-- 売れた台数が3台未満の機種は書かない（前の行があれば残す）
+- 売れた台数が3台未満の機種も、その台数（0〜2）で書く。ツールは「90日で3台未満＝売れていない機種」として、無在庫でもヤフオクでも扱わなくなる
 - 60日以上古い行はツールが使わなくなる（今まで通りの計算に戻る）
 
 ## 見る機種
-- 「状態別相場」シートに今ある `売れた値段` の行の機種すべて
-- 新しい機種を足すときは、下のリストに足してから実行する
+- ガラケー＋PS Vita：下の機種リスト
+- デジカメ・ウォークマン・MD・CD・ビデオカメラ・時計：「設定」シートB12の検索キーワードのうち、ガラケー・ゲーム機以外の全部。検索語はキーワードそのまま（IXY 650 だけ「ELPH 360」）。タイトルに含む言葉は、型番の頭の記号（DSC- DMC- EX- WM- HDR- DCR- D- SL- MZ- FinePix RICOH）を取った残り（例：DSC-W830→W830、前後に英数字が続かない形 `(?<![A-Za-z0-9])W830(?![0-9])`）。IXYは `IXY[- ]?650` の形、G-SHOCKは `GW[- ]?5000` の形
+- PS Vita以外のゲーム機（PSP・DS・3DS・ゲームボーイ等）は数えない（タイトルに複数の機種がまとめて書かれていて正しく分けられない）
 
 ## 手順（Chrome）
 1. `tabs_context_mcp` → 新しいタブで `https://www.ebay.com/sh/research?marketplace=EBAY-US&keywords=PCH-1000&dayRange=90&categoryId=0&offset=0&limit=50&tabName=SOLD` を開く
@@ -48,8 +49,8 @@ window.__ACC = /battery|film|protector|glass|case only|carrying case|hard case|g
 window.__run = async (M) => {
   const q = (a, x) => a[Math.min(a.length - 1, Math.floor(a.length * x))];
   window.__out = {}; window.__done = false;
-  for (const [k, re, pinkSplit] of M) {
-    const r = await window.__grab(k); const rx = new RegExp(re, 'i');
+  for (const [k, re, pinkSplit, query] of M) {
+    const r = await window.__grab(query || k); const rx = new RegExp(re, 'i');
     const con = r.filter(x => !window.__ACC.test(x.t) && x.p >= 40 && rx.test(x.t));   // 本体だけ（付属品・部品・$40未満を除く）
     const grp = (f) => { const c = con.filter(f); const ps = c.flatMap(x => Array(Math.min(x.n, 50)).fill(x.p + x.s)).sort((a, b) => a - b);
       return ps.length ? [q(ps, .25), q(ps, .5), q(ps, .75), c.reduce((a, x) => a + x.n, 0)] : null; };   // [安い, ふつう, 高い, 台数]（ドル）
@@ -59,7 +60,7 @@ window.__run = async (M) => {
 };
 ```
 
-## 機種リスト（[機種, タイトルに含む言葉の正規表現, 902KCだけピンクを分ける]）
+## 機種リスト（[機種, タイトルに含む言葉の正規表現, 902KCだけピンクを分ける, 検索語（省略可）]）
 今はガラケーとPS Vitaだけ。ほかのゲーム機（PSP・DS・3DS・ゲームボーイ）は、Terapeakのタイトルに複数の機種がまとめて書かれていて（「PSP 1000/2000/3000」など）機種ごとの値段が正しく出ないので、まだ入れていない。入れるときは型番がはっきりタイトルにある出品だけを数える方法を考えてから。P-01Gは売れた数が少なすぎるので外した。
 ```js
 [["902KC","902KC|903KC",1],["KY-42C","KY-?42C"],["A202KC","A202KC"],["601SH","601SH"],["KYF31","KYF31"],["SH-02L","SH-?02L"],
