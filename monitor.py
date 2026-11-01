@@ -3977,6 +3977,9 @@ if __name__ == "__main__":
         elif len(sys.argv) > 1 and sys.argv[1] == "buyermsg":   # 買い手の質問が来た・「送る」にチェックしたとき（管理表から呼ばれる）
             import yahoo
             yahoo.buyer_messages(sys.modules[__name__])
+        elif len(sys.argv) > 1 and sys.argv[1] == "airewrite":   # 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01）
+            import yahoo
+            yahoo.ai_rewrite_active(sys.modules[__name__], limit=int(sys.argv[2]) if len(sys.argv) > 2 else 200)
         elif len(sys.argv) > 1 and sys.argv[1] == "endflag":   # 気になる点（AI）に印が付いた出品中の商品を終了する（2026/11/01）
             import yahoo
             vals = yahoo.Tabs(sys.modules[__name__]).get("無在庫商品リスト")

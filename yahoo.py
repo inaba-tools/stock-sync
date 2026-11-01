@@ -1337,6 +1337,125 @@ def condition_text_en(rank, note_en, declared_en=""):
     return " ".join(parts)[:900]
 
 
+# ---------------------------------------------------------------- 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01 本人の希望）
+AI_MARK = "filled in automatically by AI"
+
+
+def ai_rewrite_active(M, limit=200, pace=4.5):
+    """出品中で、説明にまだAIの箇条書きが無いものを、新しい出品と同じ形（AIのタイトル・箇条書き・色・付属品・SIMフリー）に書き換える。
+    すでに書き換え済みのものは飛ばすので、何回動かしても大丈夫。値段・状態ランク・写真は変えない"""
+    if not os.environ.get("GEMINI_API_KEY", "").strip():
+        print("Geminiのキーが無いため止めます")
+        return 0
+    tabs = Tabs(M)
+    gem = Gemini(tabs)
+    vals = tabs.get("無在庫商品リスト")
+    head = [str(h).strip() for h in vals[0]]
+    col = {k: head.index(k) for k in ("商品仕入元URL", "eBay出品番号", "状態", "商品名", "検索語", "状態ランク（AI）") if k in head}
+    token = M.get_access_token()
+    import xml.etree.ElementTree as ET
+    ns = {"e": "urn:ebay:apis:eBLBaseComponents"}
+    pw = browser = page = None
+    done = skipped = 0
+    try:
+        for i, row in enumerate(vals[1:], start=2):
+            if done >= limit or not gem.available(2):
+                break
+            row = list(row) + [""] * (len(head) - len(row))
+            iid = str(row[col["eBay出品番号"]]).strip()
+            if str(row[col["状態"]]).strip() not in ("active", "") or not iid:
+                continue
+            ack, errs, root = M.trading_call_root("GetItem", f"<ItemID>{iid}</ItemID><DetailLevel>ReturnAll</DetailLevel>"
+                                                  "<IncludeItemSpecifics>true</IncludeItemSpecifics>", token)
+            if ack not in ("Success", "Warning"):
+                continue
+            if root.findtext(".//e:SellingStatus/e:ListingStatus", default="", namespaces=ns) not in ("Active", ""):
+                continue
+            desc_html = root.findtext(".//e:Item/e:Description", default="", namespaces=ns) or ""
+            if AI_MARK in desc_html:
+                skipped += 1
+                continue
+            url, model, title = str(row[col["商品仕入元URL"]]), str(row[col["検索語"]]), str(row[col["商品名"]])
+            try:
+                if "mercari" in url:
+                    if page is None:
+                        from playwright.sync_api import sync_playwright
+                        pw = sync_playwright().start()
+                        browser = pw.chromium.launch(headless=True)
+                        page = browser.new_page(locale="ja-JP", user_agent=(
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"))
+                    st, _, _, images, desc = _flea_status(M, page, url)
+                    detail = {"images": images, "description": desc,
+                              "condition": (page.evaluate(M.DETAIL_JS) or {}).get("condition", "") if st == "on_sale" else ""}
+                else:
+                    _, _, detail = M.check_yahoo(url)
+            except Exception:
+                continue
+            if not detail or not detail.get("images"):
+                continue
+            ans = gem.ask(2, LISTING_PROMPT.format(model=model, title=title, cond=detail.get("condition", ""),
+                                                   desc=(detail.get("description") or "")[:1500]), detail.get("images", [])[:10])
+            if not ans:
+                break
+            done += 1
+            time.sleep(pace)   # 1分15回までの決まりに収める
+            rank = str(row[col["状態ランク（AI）"]]).strip().upper() if "状態ランク（AI）" in col else ""
+            ai = {"rank": rank or str(ans.get("rank") or "").upper(), "title_en": str(ans.get("title_en") or "").strip()}
+            old_title = root.findtext(".//e:Item/e:Title", default="", namespaces=ns) or ""
+            new_title = ai_title(ai, model, old_title)
+            bullets = [str(x)[:200] for x in (ans.get("highlights_en") or []) if str(x).strip()][:5]
+            inc = [str(x)[:30] for x in (ans.get("included_en") or []) if str(x).strip()][:8]
+            if inc:
+                bullets.append(f"Included: {', '.join(inc)} (only the items shown in the photos)")
+            if not bullets:
+                continue
+            block = ("<h3>Item details</h3><p><i>The details below were filled in automatically by AI from the photos and "
+                     "the original Japanese description. Please check the photos as well.</i></p><ul>"
+                     + "".join(f"<li>{_xml(b)}</li>" for b in bullets) + "</ul>")
+            new_desc = re.sub(r"<h2>.*?</h2>", f"<h2>{_xml(new_title)}</h2>", desc_html, count=1)
+            if "<h3>Notes from the original Japanese description" in new_desc:
+                new_desc = new_desc.replace("<h3>Notes from the original Japanese description", block + "<h3>Notes from the original Japanese description", 1)
+            elif "<p>Ships from Japan." in new_desc:
+                new_desc = new_desc.replace("<p>Ships from Japan.", block + "<p>Ships from Japan.", 1)
+            else:
+                new_desc = block + new_desc
+            if ans.get("sim_unlocked") is True:
+                new_desc = new_desc.replace("Not stated by the original seller. Please check compatibility before purchase.", "Unlocked")
+            # 商品の詳しい情報（Item specifics）：今の内容を残して、色・付属品・SIMフリーだけ足す
+            specs = []
+            for nv in root.findall(".//e:Item/e:ItemSpecifics/e:NameValueList", ns):
+                n = nv.findtext("e:Name", default="", namespaces=ns)
+                vs = [v.text or "" for v in nv.findall("e:Value", ns)]
+                specs.append([n, vs])
+            names = [n for n, _ in specs]
+            color = str(ans.get("color_en") or "").strip()[:30].title()
+            for sp in specs:
+                if sp[0] == "Color" and color and sp[1] in (["As Pictured"], [""], []):
+                    sp[1] = [color]
+                if ans.get("sim_unlocked") is True and sp[0] == "Network":
+                    sp[1] = ["Unlocked"]
+                if ans.get("sim_unlocked") is True and sp[0] == "Lock Status":
+                    sp[1] = ["Network Unlocked"]
+            if inc:
+                if "Included" in names:
+                    specs[names.index("Included")][1] = [", ".join(inc)[:65]]
+                else:
+                    specs.append(["Included", [", ".join(inc)[:65]]])
+            nvl = "".join("<NameValueList><Name>" + _xml(n) + "</Name>" + "".join(f"<Value>{_xml(v)}</Value>" for v in vs)
+                          + "</NameValueList>" for n, vs in specs)
+            body = (f"<Item><ItemID>{iid}</ItemID><Title>{_xml(new_title)}</Title>"
+                    f"<Description><![CDATA[{new_desc}]]></Description><ItemSpecifics>{nvl}</ItemSpecifics></Item>")
+            res = M.trading_call("ReviseFixedPriceItem", body, token)
+            print(iid, "|", old_title, "→", new_title, "|", str(res)[:120])
+    finally:
+        if browser:
+            browser.close()
+        if pw:
+            pw.stop()
+    print(f"書き換え {done}件（書き換え済みで飛ばした {skipped}件）")
+    return done
+
+
 # ---------------------------------------------------------------- ⑩ 出品中の商品の状態（余った回数で少しずつ）
 def check_active_listings(M, per_run=5, settings=None):
     """出品中の商品をAIで見て、状態ランク・気になる点・状態の相場（eBay相場$）を無在庫商品リストに書く。
