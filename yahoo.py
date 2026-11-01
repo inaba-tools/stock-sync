@@ -1276,7 +1276,7 @@ def condition_text_en(rank, note_en, declared_en=""):
     if note_en:
         parts.append(note_en.strip())
     if declared_en:
-        parts.append(f"Seller's note: {declared_en.strip()}")
+        parts.append(f"Seller's note: {declared_en.strip().rstrip('.')}.")
     parts.append("Please check all photos for the exact condition.")
     return " ".join(parts)[:900]
 
