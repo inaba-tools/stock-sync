@@ -1410,7 +1410,7 @@ def junk_combo(M, data, page):
         return pink_limit if is_pink(model, color) else buy_by_model.get(model, buy_limit)
 
     def lim(model, color):
-        return pink_limit if is_pink(model, color) else buy_of(model, color) + room
+        return buy_of(model, color) + room   # 2026/11/02 本人の希望：ピンクも交渉の余地つき（買う5,000円・探す6,000円）
     tabs.ensure(COMBO, COMBO_HEAD)
     vals = tabs.get(COMBO, fresh=True)
     units = [_unit(r) for r in vals[1:] if len(r) > CI["ID"] and str(r[CI["ID"]]).strip().startswith("http")]
@@ -1524,7 +1524,7 @@ def junk_combo(M, data, page):
     for u in units:
         u["提案"], u["組"], u["役割"], u["見込み利益"], u["plan_memo"] = "", "", "", "", ""
         pink = u["色"] == "ピンク" and str(u["機種"]).upper() in PINK_MODELS
-        u["buy"] = u["price"] if pink else min(u["price"], buy_of(u["機種"], u["色"]))   # ピンクはそのままの値段で買う
+        u["buy"] = min(u["price"], buy_of(u["機種"], u["色"]))
     plans = _plans(M, tabs, calc, settings, units)
     out, used = [], set()
     for k, p in enumerate(plans, start=1):
