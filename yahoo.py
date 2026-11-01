@@ -1397,7 +1397,7 @@ def junk_combo(M, data, page):
         try:
             sold = sold_for(tabs, m, "")
             if sold and sold.get("安い"):
-                b = max(buy_limit, int((calc.net(sold["安い"]) - JUNK_PROFIT_MIN) / 2 // 100 * 100))
+                b = max(buy_limit, int((calc.net(sold["安い"]) - JUNK_PROFIT_MIN) / 2 // 1000 * 1000))   # 2026/11/02 本人の希望：1,000円単位で切り捨て
         except Exception:
             pass
         buy_by_model[m] = b
