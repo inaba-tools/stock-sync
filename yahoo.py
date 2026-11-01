@@ -475,7 +475,7 @@ class Gemini:
         if not self.available(tier):
             return None
         parts = [{"text": prompt}]
-        for u in list(image_urls)[:5]:
+        for u in list(image_urls)[:10]:   # 2026/11/01 写真は10枚まで見る（4枚だと液晶の写真を見落とした）
             try:
                 b = requests.get(u, headers=HEADERS, timeout=20)
                 if b.ok and len(b.content) < 4_000_000:
@@ -621,7 +621,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
     if not detail:
         return None, "出品ページが読めず", False
     ans = gem.ask(2, JUNK_PROMPT.format(model=model, color=color or "不明", title=detail["title"],
-                                        desc=(detail.get("description") or "")[:1500]), detail.get("images", [])[:4])
+                                        desc=(detail.get("description") or "")[:1500]), detail.get("images", [])[:10])
     if ans is None:
         return None, "AI未判定（" + ("キー待ち" if not gem.key else "今日の回数を使い切り・翌日") + "）", False
     if ans.get("ng"):
@@ -1021,7 +1021,7 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             continue
         model, color = str(row[COL["機種"] - 1]), str(row[COL["色"] - 1])
         ans = gem.ask(2, LISTING_PROMPT.format(model=model, title=d["title"], cond=d.get("cond_name", ""),
-                                               desc=(d.get("description") or "")[:1500]), d["images"][:4])
+                                               desc=(d.get("description") or "")[:1500]), d["images"][:10])
         if ans is None:
             break
         n += 1
@@ -1267,7 +1267,7 @@ def listing_gate(M, r, info, detail, settings=None):
     ans = gem.ask(1, LISTING_PROMPT.format(model=r.get("query") or "", title=title,
                                            cond=(detail or {}).get("condition", ""),
                                            desc=((detail or {}).get("description") or "")[:1500]),
-                  (detail or {}).get("images", [])[:4])
+                  (detail or {}).get("images", [])[:10])
     if ans is None:
         return ("WAIT", "AIの確認ができなかったため、次の回に出品します") if gem.blocked else None
     rank = str(ans.get("rank") or "").strip().upper()
@@ -1375,7 +1375,7 @@ def check_active_listings(M, per_run=5, settings=None):
             model, title = str(row[col["検索語"]]), str(row[col["商品名"]])
             ans = gem.ask(4 if per_run < 50 else 2,
                           LISTING_PROMPT.format(model=model, title=title, cond=detail.get("condition", ""),
-                                                desc=(detail.get("description") or "")[:1500]), detail.get("images", [])[:4])
+                                                desc=(detail.get("description") or "")[:1500]), detail.get("images", [])[:10])
             if not ans:
                 break
             done += 1
