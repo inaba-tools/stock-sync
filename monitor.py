@@ -1695,6 +1695,12 @@ def _main():
                             "result": f"仕入れ先の状態を2回続けて読めなかったため出品を終了 → {msg}"})
             if ok:
                 stopped += 1
+        if unknown_twice:   # めったに起きない非常事態なので、メールでも知らせる（本人の希望）
+            alert(f"【非常事態】仕入れ先の状態を読めない出品が{len(unknown_twice)}件あります",
+                  ("仕入れ先が販売中か売り切れか、2回続けて読み取れませんでした。"
+                   + ("売り切れに気づけないおそれがあるため、eBayの出品を終了しました。" if len(unknown_twice) <= 10 else
+                      "一度に10件を超えているため、メルカリ側の不具合の可能性が高く、出品は終了していません。") + "\n\n")
+                  + "\n".join(f"eBay {x['ebay_item_id']}：{x.get('title', '')[:30]} {x['mercari_url']}" for x in unknown_twice[:30]))
 
         # ---- 見張る件数が増えて30分に間に合わなくなりそうなら知らせる（見張りを2本に分ける目安。7日に1回まで） ----
         if len(targets) >= SPLIT_AT:
