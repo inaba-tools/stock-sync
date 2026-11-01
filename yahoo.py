@@ -1318,7 +1318,7 @@ def condition_text_en(rank, note_en, declared_en=""):
 def check_active_listings(M, per_run=5, settings=None):
     """出品中の商品をAIで見て、状態ランク・気になる点・状態の相場（eBay相場$）を無在庫商品リストに書く。
     2026/11/01 eBayの出品の「状態の説明」もAIのランクに合わせて書き換える。
-    状態の相場で利益2,000円の値段だと売れにくいものは、気になる点に【状態的に売れにくい】と付けるだけ（終了・値下げはしない）"""
+    問題あり（NG・ジャンク・本体ではない・型番違い）と、状態の相場で利益2,000円の値段だと売れにくいものは出品終了（本人の指示）"""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return
     tabs = Tabs(M)
@@ -1385,17 +1385,22 @@ def check_active_listings(M, per_run=5, settings=None):
             if rank not in ("S", "A", "B", "C"):
                 rank = rank or declared_rank(detail.get("condition", "")) or UNKNOWN_RANK
             raw = None
+            slow = ""
             if rank in ("S", "A", "B", "C") and settings:
                 try:
                     usd, why = rank_market_usd(M, model, title, rank, settings)
                     raw, _ = rank_market_raw_usd(M, model, title, rank, settings)
                     cost = float(str(row[col["仕入れ値(円)"]]).replace(",", "") or 0)
                     if usd is not None and cost and usd < M.floor_price_usd(cost, model, settings):
+                        slow = f"状態{rank}の相場約{int(usd * M.usd_jpy(settings)):,}円では利益2,000円の値段で売れにくい"
                         note = f"【状態的に売れにくい】{rank}相場約{int(usd * M.usd_jpy(settings)):,}円／" + note
                         pass
                 except Exception as e:
                     print("状態の相場でエラー:", type(e).__name__, str(e)[:80])
             bad = ans.get("ok") is False or rank == "ジャンク" or re.search(r"本体ではなく|のみの(商品|出品)|パーツのみ|型番違い", note)
+            if not bad and slow:   # 2026/11/01 本人の希望：状態的に売れにくい出品も終了する
+                stops.append((i, str(row[col["eBay出品番号"]]), slow))
+                flagged.append(f"・{title[:30]}（eBay {row[col['eBay出品番号']]}）：{slow} → 出品終了")
             if bad:
                 why = str(ans.get("reason") or note)[:40]
                 note = f"【問題あり・出品終了】{why}／" + note
@@ -1435,8 +1440,7 @@ def check_active_listings(M, per_run=5, settings=None):
     print(f"出品中の状態の確認：{done}件（eBayの状態の説明を書き換え{revised}件・問題ありで出品終了{len(stops)}件）")
     if flagged:
         M.alert("【AI確認】出品中の商品で問題があったもの", "\n".join(flagged[:40]) +
-                "\n\n問題あり（本体ではない・型番違い・故障など）は出品を終了しました。"
-                "状態的に売れにくいものは印を付けただけです（無在庫商品リストのV列）。")
+                "\n\n問題あり（本体ではない・型番違い・故障など）と、状態の相場では利益2,000円の値段で売れにくいものは、出品を終了しました。")
 
 
 def _xml(t):

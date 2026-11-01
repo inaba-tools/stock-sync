@@ -35,6 +35,7 @@ jobs:
       - name: 残りの出品中の商品をまとめてAIで状態確認（2026/11/01）
         run: |
           python monitor.py airecheck
+          python monitor.py endflag
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}

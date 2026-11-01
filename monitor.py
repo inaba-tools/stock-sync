@@ -3927,6 +3927,26 @@ if __name__ == "__main__":
                 a = ebay_active_items(tk).get(iid, {})
                 print(iid, a, trading_call("ReviseFixedPriceItem",
                       f"<Item><ItemID>{iid}</ItemID><StartPrice>{a['price']:.2f}</StartPrice></Item>", tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "endflag":   # 気になる点（AI）に印が付いた出品中の商品を終了する（2026/11/01）
+            import yahoo
+            vals = yahoo.Tabs(sys.modules[__name__]).get("無在庫商品リスト")
+            head = [str(h).strip() for h in vals[0]]
+            ci, cs, cn = head.index("eBay出品番号"), head.index("状態"), head.index("気になる点（AI）")
+            tk = get_access_token()
+            ups = []
+            for i, row in enumerate(vals[1:], start=2):
+                row = list(row) + [""] * (len(head) - len(row))
+                note = str(row[cn])
+                if str(row[cs]).strip() in ("active", "") and str(row[ci]).strip() and \
+                        re.search(r"【状態的に売れにくい】|【確認して】|【問題あり", note):
+                    ok, msg = stop_on_ebay(str(row[ci]).strip(), tk)
+                    why = "状態の相場では利益2,000円の値段で売れにくい" if "売れにくい" in note else "AIの確認で問題あり"
+                    ups.append({"row": i, "status": "stopped" if ok else None, "result": f"{why}のため出品を終了 → {msg}"})
+                    print(row[ci], msg)
+            if ups:
+                sheet("update", updates=ups)
+                sheet("cleanup")
+            print("終了した出品:", sum(1 for u in ups if u["status"]))
         elif len(sys.argv) > 1 and sys.argv[1] == "endids":   # 指定したeBay出品番号を終了して止める（理由は「番号:理由」）
             data = sheet("list")
             tk = get_access_token()
