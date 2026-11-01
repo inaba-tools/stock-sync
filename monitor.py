@@ -3220,32 +3220,6 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
     return best
 
 
-# ---------- 値引き候補（2026/11/01） ----------
-NEGO_MAX_PCT = 0.15     # 今の値段から最大15%引きまで
-NEGO_MIN_SOLD90 = 20    # eBayで90日に20台以上売れている機種だけ
-
-
-def nego_check(nego, u, it, q, sale, p, need, settings):
-    """利益が少し足りない出品 → 値引きをお願いすれば利益 need 円が残るなら nego に追加"""
-    if "/shops/product/" in u or SOLD90_BY_KEY.get(model_key(q), 0) < NEGO_MIN_SOLD90:
-        return
-    title = it.get("title") or ""
-    if junk_reason(title) or no_body_reason(title) or reserved_reason(title):
-        return
-    price = int(it["price"])
-    ask = int((price - (need - p)) // 10 * 10)   # 利益は仕入れ値が1円下がると1円増える
-    if ask <= 0 or (price - ask) / price > NEGO_MAX_PCT:
-        return
-    p2, _ = profit(ask, sale, settings, q)
-    while p2 < need and (price - ask) / price <= NEGO_MAX_PCT:
-        ask -= 10
-        p2, _ = profit(ask, sale, settings, q)
-    if p2 < need or (price - ask) / price > NEGO_MAX_PCT:
-        return
-    nego.append({"model": q, "title": title, "url": u, "src": source_name(u), "price": price, "ask": ask,
-                 "profit": int(p2), "sold90": SOLD90_BY_KEY.get(model_key(q), 0)})
-
-
 _mon_check = {"t": 0, "busy": False}
 
 
@@ -3287,7 +3261,6 @@ def discover():
     KNOWN_MODELS[:] = keywords
     min_margin = 0   # 2026/10/22 利益率の条件はやめて、利益2,000円以上かどうかだけで判断する（設定シートB13は使わない）
     min_profit = float(settings.get("min_profit") or 2000)   # 設定シートB14（2026/11/01 読めないときの値も2,000円に）
-    nego = []   # 2026/11/01 値引き候補（利益が少し足りない出品）
     # シートへの追加は20件に限らない（出品の件数は見張り側で1回B15件まで）。ただし出品待ちの候補が多すぎると見張りが遅れるので、
     # 出品待ちはシート全体で CANDIDATE_POOL_MAX 件まで（4本で分ける）。追加できなかった候補は、次の回にまた見つかる
     pending = sum(1 for r in data["rows"] if not r.get("ebay_item_id") and r.get("status") in ("", "active"))
@@ -3358,8 +3331,6 @@ def discover():
                 if game_info(q) and game_reject_reason(it["title"], q, it["price"], sale, settings):
                     continue   # ゲーム機は商品名で本体かどうかを厳しく確認
                 p, rate = profit(it["price"], sale, settings, q)
-                if p < max(min_profit, min_profit_for(0, settings, q)):
-                    nego_check(nego, u, it, q, sale, p, max(min_profit, min_profit_for(0, settings, q)), settings)
                 if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
@@ -3395,8 +3366,6 @@ def discover():
                 if game_info(q) and game_reject_reason(it["title"], q, it["price"], sale, settings):
                     continue
                 p, rate = profit(it["price"], sale, settings, q)
-                if p < max(min_profit, min_profit_for(0, settings, q)):
-                    nego_check(nego, u, it, q, sale, p, max(min_profit, min_profit_for(0, settings, q)), settings)
                 if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
@@ -3404,18 +3373,12 @@ def discover():
                                   "result": f"自動発見 {now()}"})
             time.sleep(random.uniform(4, 7))   # メルカリに止められないよう、検索ごとに少し待つ
         flea = None
-        if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 フリマの修理用ジャンク・値引き候補の売り切れ確認（1本目だけ・ブラウザを使い回す）
+        if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 フリマの修理用ジャンクさがし（1本目だけ・ブラウザを使い回す）
             try:
                 import yahoo
                 flea = yahoo.flea_junk(sys.modules[__name__], data, page)
             except Exception as e:
                 print("フリマのジャンク探しでエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
-        if nego:   # 2026/11/01 値引き候補シートに追加。AIで状態を見るため、ブラウザを閉じる前に（メルカリの出品ページを開く）
-            try:
-                import yahoo
-                yahoo.nego_add(sys.modules[__name__], nego, page, settings)
-            except Exception as e:
-                print("値引き候補の追加でエラー:", type(e).__name__, str(e)[:150])
         browser.close()
     save_market_cache()
 

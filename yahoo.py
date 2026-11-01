@@ -29,18 +29,13 @@ DONE = ("終了", "見送り", "負け")
 DEVICES = "端末管理"
 PARTS = "部品表"
 REPAIR = "修理部品表"   # 2026/11/01 機種×不具合×部品・値段・購入リンク（部品代はここの値段を使う）
-NEGO = "値引き候補"
-NEGO_HEAD = ["機種", "商品名", "URL", "仕入れ先", "今の値段", "お願いする値段", "値引き後の利益", "eBayの90日販売台数",
-             "コピー用の文面", "状況", "追加日", "最終確認", "メール", "状態（AI）"]
-NEGO_AI_MAX = 15   # 1回の候補さがしでAIに見せる値引き候補の数（無料枠を使いすぎないように）
-NEGO_MSG = "はじめまして。購入を検討しております。大変恐縮ですが、{ask:,}円でお譲りいただくことは可能でしょうか？ご検討いただけますと幸いです。"
 JUDGED_FILE = os.path.join(".cache", "ai_judged.json")   # AIで見た出品（1件1回だけ判定する）
 RANKMKT = "状態別相場"
 HEADERS = {"User-Agent": "stock-sync/1.0 (+https://github.com/inaba-tools/stock-sync)"}
 DUTY = 12.5
 ACTIVE = ("検討中", "入札中", "上回られた")
 MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多くなりすぎないように）
-NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク・値引き候補）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
+NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
 # 2026/11/1 本人の希望で「終了日時」を一番左（A列）へ。終了・見送り・負けの行は「ヤフオク履歴」シートへ移し、残りは終了が近い順に並べる
 COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
                                    "入札数", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
@@ -825,8 +820,7 @@ def run(M, data, mode="discover", flea=None):
     if body:
         M.alert("【ヤフオク】" + ("上回られました" if mails_outbid else "まもなく終了"), "\n\n".join(body)
                 + "\n\n入札はご自身で判断してください（自動入札はしません）")
-    nego_new = nego_unsent(tabs) if mode == "discover" else []
-    if NEW_MAIL and (new_rows or nego_new):
+    if NEW_MAIL and new_rows:
         lines, flines = [], []
         for c, aid in new_rows:
             capt = f"上限 {int(c['上限']):,}円" if isinstance(c.get("上限"), (int, float)) else (
@@ -841,16 +835,9 @@ def run(M, data, mode="discover", flea=None):
             body.append("【フリマの修理用ジャンク（早い者勝ち）】\n" + "\n".join(flines))
         if lines:
             body.append("【ヤフオク】\n" + "\n".join(lines) + ("\n" + "\n".join(notes) if notes else ""))
-        if nego_new:
-            body.append("【値引き候補】（OKなら、すぐ買って手元在庫に。文面は「値引き候補」シートのコピー用の文面）\n" + "\n".join(
-                f"・[{r[3]}] {r[0]} 今 {int(num(r[4]) or 0):,}円 → {int(num(r[5]) or 0):,}円なら利益 {int(num(r[6]) or 0):,}円\n  {r[2]}"
-                for _, r in nego_new))
-        subj = "・".join(x for x in [f"フリマのジャンク{len(flines)}件" if flines else "", f"ヤフオク{len(lines)}件" if lines else "",
-                                     f"値引き候補{len(nego_new)}件" if nego_new else ""] if x)
+        subj = "・".join(x for x in [f"フリマのジャンク{len(flines)}件" if flines else "", f"ヤフオク{len(lines)}件" if lines else ""] if x)
         M.alert(f"【仕入れ】新しい候補（{subj}）", "\n\n".join(body)
-                + "\n\n入札・購入・値引きのお願いはご自身で（自動ではしません）。")
-        if nego_new:
-            tabs.set(NEGO, [(i, NEGO_HEAD.index("メール") + 1, "済") for i, _ in nego_new])
+                + "\n\n入札・購入はご自身で（自動ではしません）。")
     if won:
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
@@ -1235,8 +1222,6 @@ FLEA_QUERIES = [
 FLEA_DETAIL_MAX = 8      # 1回に出品ページを開く（AIで見る）のは8件まで
 FLEA_RECHECK_H = 3       # フリマの行は3時間ごとに売り切れを確認
 FLEA_RECHECK_MAX = 10
-NEGO_RECHECK_H = 6       # 値引き候補は6時間ごとに売り切れを確認
-NEGO_RECHECK_MAX = 10
 
 
 def _mercari_junk(M, page, q, cat):
@@ -1270,7 +1255,7 @@ def _flea_status(M, page, url):
 
 
 def flea_junk(M, data, page):
-    """候補さがしの1本目の中で：フリマの修理用ジャンクを探す・フリマの行と値引き候補の売り切れを確認。
+    """候補さがしの1本目の中で：フリマの修理用ジャンクを探す・フリマの行の売り切れを確認。
     戻り値は run(flea=...) に渡す（新しい候補とメールはヤフオクの回で1通にまとめる）"""
     tabs = Tabs(M)
     settings = data.get("settings", {})
@@ -1377,114 +1362,7 @@ def flea_junk(M, data, page):
                           "seller": it.get("seller", "")}, u))
     save_judged()
 
-    # ---- 値引き候補：売り切れ・削除なら「終了」
-    try:
-        nego_refresh(M, tabs, page)
-    except Exception as e:
-        print("値引き候補の確認でエラー:", type(e).__name__, str(e)[:100])
     print(f"フリマのジャンク：新しい候補{len(rows)}件／出品ページを開いた{opened}件／フリマの行の確認{n}件")
     return {"rows": rows, "cells": cells, "tabs": tabs, "gem": gem}
 
 
-# ---------------------------------------------------------------- 値引き候補（2026/11/01）
-def nego_add(M, nego, page=None, settings=None):
-    """discover で見つけた値引き候補をシートに追加（同じURLは追加しない）。
-    2026/11/01 追加する前にAI（Gemini無料枠）で写真と説明文を見て、状態ランクの相場でお願いする値段と利益を計算し直す。
-    ダメな出品・状態の相場では利益が残らない出品は入れない。AIが使えない日（上限）は入れずに次の回へ"""
-    tabs = Tabs(M)
-    vals = tabs.get(NEGO)
-    have = {str(r[2]).strip() for r in vals[1:] if len(r) > 2}
-    settings = settings or {}
-    today, rows = now_s(), []
-    gem = Gemini(tabs) if os.environ.get("GEMINI_API_KEY", "").strip() else None
-    calc = Calc(settings, setting_map(tabs.get("設定"))) if gem else None
-    load_judged()
-    asked = 0
-    for x in nego:
-        if x["url"] in have:
-            continue
-        ai = ""
-        if gem:
-            key = "nego:" + x["url"]
-            got = _judged.get(key)
-            if got is None:
-                if asked >= NEGO_AI_MAX or not gem.available(2):
-                    continue
-                try:
-                    st, _, _, images, desc = _flea_status(M, page, x["url"]) if (page or "paypayfleamarket" in x["url"]) \
-                        else ("unknown", None, None, [], "")
-                except Exception:
-                    continue
-                if st != "on_sale":
-                    continue
-                asked += 1
-                ans = gem.ask(2, LISTING_PROMPT.format(model=x["model"], title=x["title"], cond="", desc=(desc or "")[:1500]),
-                              (images or [])[:4])
-                if ans is None:
-                    continue
-                got = [ans.get("ok") is not False, str(ans.get("rank") or "").strip().upper(),
-                       str(ans.get("reason") or ans.get("note") or "")[:40], datetime.now(JST).strftime("%Y-%m-%d")]
-                _judged[key] = got
-            ok, rank, note = got[0], got[1], got[2]
-            if not ok or rank not in ("S", "A", "B", "C"):
-                continue
-            sale, why = sale_for(M, tabs, x["model"], color_of(x["title"]), rank, settings)
-            if not sale:
-                continue
-            total = sale / M.usd_jpy(settings)
-            need = calc.min_profit
-            price = int(x["price"])
-            p_now = M.profit_from_total(total, price, x["model"], settings)
-            if p_now >= need:      # 値引きなしで利益が出る → 値引き候補ではない（普通の候補の方で扱う）
-                continue
-            ask = int((price - (need - p_now)) // 10 * 10)
-            while ask > 0 and M.profit_from_total(total, ask, x["model"], settings) < need:
-                ask -= 10
-            if ask <= 0 or (price - ask) / price > M.NEGO_MAX_PCT:
-                continue
-            x = dict(x, ask=ask, profit=int(M.profit_from_total(total, ask, x["model"], settings)))
-            ai = f"{rank}：{note}（{why}）" if note else f"{rank}（{why}）"
-        have.add(x["url"])
-        rows.append([x["model"], x["title"][:60], x["url"], x["src"], x["price"], x["ask"], x["profit"], x["sold90"],
-                     NEGO_MSG.format(ask=x["ask"]), "未", today, today, "", ai])
-    save_judged()
-    if rows:
-        tabs.append(NEGO, rows)
-        print(f"値引き候補を{len(rows)}件追加（AIに見せたのは{asked}件）")
-
-
-def nego_unsent(tabs):
-    """まだメールで知らせていない値引き候補 [(行, 行の中身)]"""
-    out = []
-    for i, r in enumerate(tabs.get(NEGO, fresh=True)[1:], start=2):
-        r = list(r) + [""] * (len(NEGO_HEAD) - len(r))
-        if str(r[9]).strip() == "未" and not str(r[12]).strip() and str(r[2]).startswith("http"):
-            out.append((i, r))
-    return out[:30]
-
-
-def nego_refresh(M, tabs, page):
-    vals = tabs.get(NEGO)
-    now_dt = datetime.now(JST)
-    cells, n = [], 0
-    for i, r in enumerate(vals[1:], start=2):
-        r = list(r) + [""] * (len(NEGO_HEAD) - len(r))
-        if str(r[9]).strip() not in ("未", "送る予定", "送った", "お願い済み", "OK") or n >= NEGO_RECHECK_MAX:   # 状況：未／送る予定／送った／OK／断られた／購入済み／終了
-            continue
-        last = to_dt(r[11])
-        if last and (now_dt - last).total_seconds() < NEGO_RECHECK_H * 3600:
-            continue
-        n += 1
-        try:
-            st, price, _, _, _ = _flea_status(M, page, str(r[2]).strip())
-        except Exception:
-            continue
-        if st in ("sold", "deleted"):
-            cells.append((i, 10, "終了"))
-        if st in ("sold", "deleted", "on_sale"):
-            cells.append((i, 12, now_s()))
-        if st == "on_sale" and price and num(r[4]) != price:
-            cells.append((i, 5, price))
-        time.sleep(1)
-    if cells:
-        tabs.set(NEGO, cells)
