@@ -668,7 +668,7 @@ CAMERA_MODELS = {"DSC-W830": 663, "DSC-W570": 670, "DSC-W800": 530, "DSC-W55": 3
                  "DSC-T70": 86, "DSC-TX30": 86, "DSC-TX66": 84, "DSC-T2": 78, "DSC-W560": 76, "DSC-T20": 73,
                  "DSC-TX55": 73, "DSC-WX50": 72, "DSC-TX20": 57, "DSC-WX80": 47, "DSC-T300": 41,
                  # 2026/11/01 追加（Terapeakの売れた値段とメルカリの売れた値段を比べて、利益2,000円以上残る機種）
-                 "DSC-HX9V": 89, "DSC-HX30V": 122, "DSC-HX50V": 20}
+                 "DSC-HX9V": 89, "DSC-HX30V": 122, "DSC-HX50V": 20, "DSC-HX10V": 40, "DSC-WX5": 29}
 MD_MODELS = {"MZ-NE410": 62, "MZ-RH1": 29, "MZ-E620": 26, "MZ-N1": 22, "MZ-N910": 20, "MZ-N920": 15, "MZ-E900": 10,
              "MZ-N707": 51, "MZ-N505": 46}
 for _m in CAMERA_MODELS:
