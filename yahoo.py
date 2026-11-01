@@ -26,6 +26,12 @@ PT = ZoneInfo("America/Los_Angeles")   # Gemini の1日の回数は太平洋時�
 TAB = "ヤフオク入札"
 DEVICES = "端末管理"
 PARTS = "部品表"
+REPAIR = "修理部品表"   # 2026/11/01 機種×不具合×部品・値段・購入リンク（部品代はここの値段を使う）
+NEGO = "値引き候補"
+NEGO_HEAD = ["機種", "商品名", "URL", "仕入れ先", "今の値段", "お願いする値段", "値引き後の利益", "eBayの90日販売台数",
+             "コピー用の文面", "状況", "追加日", "最終確認", "メール"]
+NEGO_MSG = "はじめまして。購入を検討しております。大変恐縮ですが、{ask:,}円でお譲りいただくことは可能でしょうか？ご検討いただけますと幸いです。"
+JUDGED_FILE = os.path.join(".cache", "ai_judged.json")   # AIで見た出品（1件1回だけ判定する）
 RANKMKT = "状態別相場"
 HEADERS = {"User-Agent": "stock-sync/1.0 (+https://github.com/inaba-tools/stock-sync)"}
 DUTY = 12.5
@@ -116,7 +122,8 @@ class Calc:
         self.ship = float(settings.get("ship_jpy") or sget(smap, "送料（円）"))
         self.fee = float(settings.get("fee_pct") or sget(smap, "eBay手数料"))
         self.other = float(settings.get("other_pct") or sget(smap, "その他の手数料"))
-        self.min_profit = sget(smap, "ヤフオクの最低利益", 2000)
+        # 最低利益は設定シートB14（最低の利益額）。2026/11/01 ヤフオク用の欄（H6）も B14 を参照する式にした
+        self.min_profit = float(settings.get("min_profit") or sget(smap, "最低の利益額") or sget(smap, "ヤフオクの最低利益", 2000))
         self.parts_default = sget(smap, "ジャンクの部品代の目安", 3000)
         self.adj = float(settings.get("market_adj") or 80) / 100
         self.rate = 1 - (self.fee + self.other + DUTY) / 100
@@ -409,6 +416,7 @@ class Gemini:
             print("Geminiにつながりませんでした:", type(e).__name__)
             return None
         self._count()
+        time.sleep(4.5)   # 無料枠の1分あたりの回数（15回）を超えないように
         if r.status_code == 429:
             print("Geminiの無料枠（1日の回数）を使い切りました。残りは明日に回します")
             self.blocked = True
@@ -453,21 +461,35 @@ S=新品同様、A=キズほぼなし、B=使用感・小キズ、C=目立つキ
 
 # ---------------------------------------------------------------- ジャンクの上限（出品ごと）
 def parts_cost(tabs, model, parts, calc):
-    """部品表（機種・部品・値段）にあればその値段、無ければ部品取りジャンク1台分の目安（仮）"""
+    """修理部品表（機種・不具合・部品・値段）→ 部品表（取り出した部品）の順に値段を探す。無ければ目安（仮）"""
     price, note = 0, ""
-    table = {}
+    rows = []   # (機種, 言葉のリスト, 値段)
+    try:
+        for row in tabs.get(REPAIR)[1:]:
+            if len(row) >= 4 and str(row[3]).strip():
+                v = num(row[3])
+                if v is not None:
+                    rows.append((str(row[0]).strip(), [str(row[1]).strip(), str(row[2]).strip()], v))
+    except Exception:
+        pass
     try:
         for row in tabs.get(PARTS)[1:]:
             if len(row) >= 4 and str(row[3]).strip():
-                try:
-                    table[(market_model(str(row[1])), str(row[2]).strip())] = float(str(row[3]).replace(",", ""))
-                except ValueError:
-                    pass
+                v = num(row[3])
+                if v is not None:
+                    rows.append((str(row[1]).strip(), [str(row[2]).strip()], v))
     except Exception:
         pass
+
+    def find(p):
+        for m, words, v in rows:
+            if market_model(m).upper() == market_model(model).upper() and any(w and (w in p or p in w) for w in words):
+                return v
+        return None
+
     missing = []
     for p in parts or []:
-        v = table.get((market_model(model), p))
+        v = find(str(p))
         if v is None:
             missing.append(p)
         else:
@@ -478,9 +500,45 @@ def parts_cost(tabs, model, parts, calc):
     return price, note
 
 
+_judged = {}
+
+
+def load_judged():
+    try:
+        with open(JUDGED_FILE) as f:
+            _judged.update(json.load(f))
+    except (OSError, ValueError):
+        pass
+    old = (datetime.now(JST) - timedelta(days=21)).strftime("%Y-%m-%d")
+    for k in [k for k, v in _judged.items() if v[2] < old]:
+        del _judged[k]
+
+
+def save_judged():
+    try:
+        os.makedirs(".cache", exist_ok=True)
+        with open(JUDGED_FILE, "w") as f:
+            json.dump(_judged, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
 def junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
-    """ジャンク1件の上限（M列）とメモ。戻り値 (上限 or None, メモ, 判定済みか)"""
-    detail = y_item(it["id"]) if not it.get("images") else it
+    """ジャンク1件の上限（M列）とメモ。戻り値 (上限 or None, メモ, 判定済みか)。AIの判定は出品ごとに1回だけ（結果を覚えておく）"""
+    if not _judged:
+        load_judged()
+    if it["id"] in _judged:
+        cap, memo, _ = _judged[it["id"]]
+        return cap, memo, True
+    cap, memo, judged = _junk_cap(M, tabs, gem, calc, settings, it, model, color, use)
+    if judged:
+        _judged[it["id"]] = [cap, memo, datetime.now(JST).strftime("%Y-%m-%d")]
+        save_judged()
+    return cap, memo, judged
+
+
+def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
+    detail = it if (it.get("images") or not it.get("auction", True)) else y_item(it["id"])
     if not detail:
         return None, "出品ページが読めず", False
     ans = gem.ask(2, JUNK_PROMPT.format(model=model, color=color or "不明", title=detail["title"],
@@ -500,7 +558,10 @@ def junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
         rank = "C"
     broken = ans.get("broken") or []
     pink = color == "ピンク" and model.upper() in PINK_MODELS
-    ok_fix = {"液晶", "外装割れ", "充電口"} if pink else {"液晶", "外装割れ"}
+    # 直す範囲：液晶・外装（ガラケーは部品取りと組み合わせ）、ゲーム機はバッテリー・スライドパッド・ボタンも
+    ok_fix = {"液晶", "外装割れ", "外装"} | ({"充電口"} if pink else set())
+    if M.game_info(model):
+        ok_fix |= {"バッテリー", "スライドパッド", "スティック", "ボタン", "十字キー"}
     if use == "部品取り":
         # 生きている部品で直せる相手の1台（端末管理の「部品待ち」）が直ったときの利益から上限を出す
         target = None
@@ -591,16 +652,18 @@ def due(row, now_dt, soon_only):
     return last is None or (now_dt - last).total_seconds() / 3600 >= gap - 0.05
 
 
-def run(M, data, mode="discover"):
-    """mode="discover"：行の更新＋新しい出品さがし（1時間ごとの回の1本目）／"soon"：終了2時間前の行だけ（30分ごとの見張りの回）"""
-    tabs = Tabs(M)
+def run(M, data, mode="discover", flea=None):
+    """mode="discover"：行の更新＋新しい出品さがし（1時間ごとの回の1本目）／"soon"：終了2時間前の行だけ（30分ごとの見張りの回）
+    flea：flea_junk の結果（フリマの修理用ジャンクの新しい候補・フリマの行の更新）。ヤフオクの新着と1通のメールにまとめる"""
+    flea = flea or {}
+    tabs = flea.get("tabs") or Tabs(M)
     settings = data.get("settings", {})
     smap = setting_map(tabs.get("設定"))
     calc = Calc(settings, smap)
-    gem = Gemini(tabs)
+    gem = flea.get("gem") or Gemini(tabs)
     vals = tabs.get(TAB)
     now_dt = datetime.now(JST)
-    cells, mails_outbid, mails_soon, ended_bid, notes = [], [], [], [], []
+    cells, mails_outbid, mails_soon, ended_bid, notes = list(flea.get("cells") or []), [], [], [], []
     known = {str(r[COL["ID"] - 1]).strip() for r in vals[1:] if len(r) >= COL["ID"]}
     found_in_search = {}
 
@@ -634,7 +697,7 @@ def run(M, data, mode="discover"):
     for i, row in enumerate(vals[1:], start=2):
         row = list(row) + [""] * (20 - len(row))
         st, aid = str(row[0]).strip(), str(row[COL["ID"] - 1]).strip()
-        if st not in ACTIVE or not aid:
+        if st not in ACTIVE or not aid or aid.startswith("http"):   # フリマの行は flea_junk で確認
             continue
         info = None
         if aid in found_in_search and not (mode == "soon"):
@@ -716,13 +779,16 @@ def run(M, data, mode="discover"):
     for i, aid, row, price, mail in won:
         record_win(M, tabs, row, aid, price, mail)
 
-    # ---- 新しい候補を追加
+    # ---- 新しい候補を追加（フリマの修理用ジャンクも同じシートに）
+    new_rows += [x for x in (flea.get("rows") or []) if x[1] not in {a for _, a in new_rows}]
     if new_rows:
         start = len(vals) + 1
         rows = []
         for k, (c, aid) in enumerate(new_rows):
             r = start + k
-            rows.append([c["状態"], f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&T{r},"開く")', c["用途"],
+            link = (f'=HYPERLINK(T{r},"{c["src"]}")' if c.get("src") else
+                    f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&T{r},"ヤフオク")')
+            rows.append([c["状態"], link, c["用途"],
                          c["ジャンル"], c["機種"], c["色"], c["商品の状態"], c["現在価格"], c["送料"],
                          f'=IF(H{r}="","",H{r}+N(I{r}))', c["入札数"], c["終了日時"],
                          c["上限"] if c.get("上限") is not None else M_FORMULA.format(r=r), "", c.get("相場", ""),
@@ -744,15 +810,32 @@ def run(M, data, mode="discover"):
     if body:
         M.alert("【ヤフオク】" + ("上回られました" if mails_outbid else "まもなく終了"), "\n\n".join(body)
                 + "\n\n入札はご自身で判断してください（自動入札はしません）")
-    if new_rows:
-        lines = []
+    nego_new = nego_unsent(tabs) if mode == "discover" else []
+    if new_rows or nego_new:
+        lines, flines = [], []
         for c, aid in new_rows:
-            capt = f"参考入札額 {int(c['上限']):,}円" if isinstance(c.get("上限"), (int, float)) else (
-                "参考入札額はシートで確認" if c["用途"] == "在庫" else "参考入札額：AI未判定")
-            lines.append(f"・{c['機種']} {c['色']} {c['商品の状態']}（{c['用途']}）今 {c['現在価格']:,}円＋送料{c['送料'] if c['送料'] != '' else '不明'}"
-                         f" → {capt}\n  {c['メモ'][:60]}\n  https://auctions.yahoo.co.jp/jp/auction/{aid}")
-        M.alert(f"【ヤフオク】新しい候補 {len(new_rows)}件", "\n".join(lines) + ("\n\n" + "\n".join(notes) if notes else "")
-                + "\n\n「ヤフオク入札」シートで参考入札額を見て、入札はご自身で。")
+            capt = f"上限 {int(c['上限']):,}円" if isinstance(c.get("上限"), (int, float)) else (
+                "参考入札額はシートで確認" if c["用途"] == "在庫" else "上限：AI未判定")
+            if c.get("src"):   # フリマ（即決・早い者勝ち）
+                flines.append(f"・[{c['src']}] {c['機種']} {c['色']}（{c['用途']}）{c['現在価格']:,}円 → {capt}\n  {c['メモ'][:70]}\n  {aid}")
+            else:
+                lines.append(f"・{c['機種']} {c['色']} {c['商品の状態']}（{c['用途']}）今 {c['現在価格']:,}円＋送料{c['送料'] if c['送料'] != '' else '不明'}"
+                             f" → {capt}\n  {c['メモ'][:60]}\n  https://auctions.yahoo.co.jp/jp/auction/{aid}")
+        body = []
+        if flines:
+            body.append("【フリマの修理用ジャンク（早い者勝ち）】\n" + "\n".join(flines))
+        if lines:
+            body.append("【ヤフオク】\n" + "\n".join(lines) + ("\n" + "\n".join(notes) if notes else ""))
+        if nego_new:
+            body.append("【値引き候補】（OKなら、すぐ買って手元在庫に。文面は「値引き候補」シートのコピー用の文面）\n" + "\n".join(
+                f"・[{r[3]}] {r[0]} 今 {int(num(r[4]) or 0):,}円 → {int(num(r[5]) or 0):,}円なら利益 {int(num(r[6]) or 0):,}円\n  {r[2]}"
+                for _, r in nego_new))
+        subj = "・".join(x for x in [f"フリマのジャンク{len(flines)}件" if flines else "", f"ヤフオク{len(lines)}件" if lines else "",
+                                     f"値引き候補{len(nego_new)}件" if nego_new else ""] if x)
+        M.alert(f"【仕入れ】新しい候補（{subj}）", "\n\n".join(body)
+                + "\n\n入札・購入・値引きのお願いはご自身で（自動ではしません）。")
+        if nego_new:
+            tabs.set(NEGO, [(i, NEGO_HEAD.index("メール") + 1, "済") for i, _ in nego_new])
     if won:
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
@@ -1024,3 +1107,222 @@ def weekly_rank_market(M, data):
     except OSError:
         pass
     M.sheet("tab_replace", name=RANKMKT, values=out)
+
+
+# ---------------------------------------------------------------- フリマ（メルカリ・Yahoo!フリマ）の修理用ジャンク（2026/11/01）
+# (検索語, ジャンル, 機種の候補, メルカリのカテゴリ)。1時間ごとに新着1ページだけ見る（自動出品・購入はしない）
+FLEA_QUERIES = [
+    ("3DS LL ジャンク", "ゲーム機", ["SPR-001"], "7038"),
+    ("New 3DS LL ジャンク", "ゲーム機", ["RED-001"], "8882"),
+    ("PSP ジャンク", "ゲーム機", ["PSP-3000", "PSP-2000", "PSP-1000"], "7076"),
+    ("DSi LL ジャンク", "ゲーム機", ["UTL-001"], "8898"),
+    ("902KC ジャンク", "ガラケー", ["902KC"], ""),
+    ("903KC ジャンク", "ガラケー", ["903KC"], ""),
+]
+FLEA_DETAIL_MAX = 8      # 1回に出品ページを開く（AIで見る）のは8件まで
+FLEA_RECHECK_H = 3       # フリマの行は3時間ごとに売り切れを確認
+FLEA_RECHECK_MAX = 10
+NEGO_RECHECK_H = 6       # 値引き候補は6時間ごとに売り切れを確認
+NEGO_RECHECK_MAX = 10
+
+
+def _mercari_junk(M, page, q, cat):
+    url = ("https://jp.mercari.com/search?status=on_sale&sort=created_time&order=desc"
+           + (f"&category_id={cat}" if cat else "") + "&keyword=" + requests.utils.quote(q)
+           + M.MERCARI_FIXED.split("&item_condition_id")[0])   # 通常出品のみ（状態は全部）
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_selector('a[href*="/item/m"], a[href*="/shops/product/"]', timeout=25000)
+    return [dict(it, src="メルカリ") for it in page.evaluate(M.SEARCH_JS)
+            if "/shops/product/" not in it["url"] and not it.get("auction")]
+
+
+def _yahoo_junk(M, q):
+    r = requests.get(f"{M.YAHOO_API}/v1/search", headers=M.YAHOO_HEADERS, timeout=30,
+                     params={"query": q, "results": 100, "sort": "price", "order": "asc", "itemStatus": "open"})
+    r.raise_for_status()
+    return [{"url": f"https://paypayfleamarket.yahoo.co.jp/item/{it['id']}", "title": it.get("title", ""),
+             "price": it.get("price"), "seller": it.get("sellerId", ""), "src": "Yahoo!フリマ"}
+            for it in r.json().get("items", []) if (it.get("category") or {}).get("id") in M.YAHOO_OK_CATEGORIES]
+
+
+def _flea_status(M, page, url):
+    """(状態, 値段, 出品者, 写真, 説明文)"""
+    if "paypayfleamarket" in url:
+        st, info, detail = M.check_yahoo(url)
+    else:
+        st, info = M.check_mercari(page, url)
+        detail = page.evaluate(M.DETAIL_JS) if st == "on_sale" else {}
+    return st, (info or {}).get("price"), (info or {}).get("seller", ""), (detail or {}).get("images", []), \
+        (detail or {}).get("description", "")
+
+
+def flea_junk(M, data, page):
+    """候補さがしの1本目の中で：フリマの修理用ジャンクを探す・フリマの行と値引き候補の売り切れを確認。
+    戻り値は run(flea=...) に渡す（新しい候補とメールはヤフオクの回で1通にまとめる）"""
+    tabs = Tabs(M)
+    settings = data.get("settings", {})
+    calc = Calc(settings, setting_map(tabs.get("設定")))
+    gem = Gemini(tabs)
+    vals = tabs.get(TAB)
+    now_dt = datetime.now(JST)
+    known = {str(r[COL["ID"] - 1]).strip() for r in vals[1:] if len(r) >= COL["ID"]}
+    excluded = M.excluded_sellers(data)
+    cells, rows, opened = [], [], 0
+    load_judged()
+
+    # ---- 今あるフリマの行：売り切れ・削除なら「終了」、値段が変われば更新
+    n = 0
+    for i, row in enumerate(vals[1:], start=2):
+        row = list(row) + [""] * (20 - len(row))
+        aid = str(row[COL["ID"] - 1]).strip()
+        if str(row[0]).strip() != "検討中" or not aid.startswith("http") or n >= FLEA_RECHECK_MAX:
+            continue
+        last = to_dt(row[COL["最終更新"] - 1])
+        if last and (now_dt - last).total_seconds() < FLEA_RECHECK_H * 3600:
+            continue
+        n += 1
+        try:
+            st, price, _, _, _ = _flea_status(M, page, aid)
+        except Exception:
+            continue
+        if st in ("sold", "deleted"):
+            cells += [(i, 1, "終了"), (i, COL["最終更新"], now_s())]
+        elif st == "on_sale":
+            cells.append((i, COL["最終更新"], now_s()))
+            if price:
+                cells.append((i, COL["現在価格"], price))
+        time.sleep(1)
+
+    # ---- 新しいジャンクをさがす
+    for q, genre, models, cat in FLEA_QUERIES:
+        items = []
+        try:
+            items += _mercari_junk(M, page, q, cat)
+        except Exception as e:
+            print("メルカリのジャンク検索に失敗:", q, type(e).__name__)
+        try:
+            items += _yahoo_junk(M, q.replace(" ジャンク", " 本体 ジャンク") if genre == "ゲーム機" else q)   # 安い順だとソフトばかりになるため
+        except Exception as e:
+            print("Yahoo!フリマのジャンク検索に失敗:", q, type(e).__name__)
+        time.sleep(2)
+        for it in items:
+            u = it["url"].split("?")[0]
+            if u in known or not it.get("price") or len(rows) >= MAX_NEW:
+                continue
+            t = unicodedata.normalize("NFKC", it.get("title") or "")
+            if M.reserved_reason(t) or NOT_ITEM.search(t) or NG_ALWAYS.search(t):
+                continue
+            if it.get("seller") and M.seller_id(it["seller"]) in excluded:
+                continue
+            model = next((m for m in models if (M.has_model(t, m) if genre == "ガラケー" else M.match_game(t, m))), None)
+            if not model:
+                continue
+            if M.looks_like_accessory(t) and not any(w in t for w in M.BODY_WORDS):
+                continue
+            color = color_of(t)
+            if color == "複数色":
+                continue
+            pink = color == "ピンク" and model.upper() in PINK_MODELS
+            if NG_UNLESS_REPAIRABLE.search(t) and not pink and genre == "ガラケー":
+                continue
+            price = int(it["price"])
+            # ふるい（AIの前）：外装Cで直した場合の相場から、明らかに高すぎる出品を外す
+            sale, why = sale_for(M, tabs, model, color, "C", settings)
+            if not sale:
+                continue
+            rough = calc.cap(sale, 0, calc.parts_default)
+            if price > rough:
+                continue
+            known.add(u)
+            if u not in _judged and opened >= FLEA_DETAIL_MAX:
+                continue
+            images, desc = [], ""
+            if u not in _judged:   # 出品ページはAIで見る前に1回だけ開く
+                opened += 1
+                try:
+                    st, p2, seller, images, desc = _flea_status(M, page, u)
+                except Exception:
+                    continue
+                if st != "on_sale":
+                    continue
+                if seller and M.seller_id(seller) in excluded:
+                    continue
+                if NG_ALWAYS.search(unicodedata.normalize("NFKC", desc or "")):
+                    _judged[u] = [None, "説明文にNGの記載", now_dt.strftime("%Y-%m-%d")]
+                    continue
+                price = int(p2 or price)
+            use = "修理して在庫" if (pink or genre == "ゲーム機" or re.search(r"液晶|画面|割れ|充電", t)) else "部品取り"
+            cap, memo, judged = junk_cap(M, tabs, gem, calc, settings,
+                                         {"id": u, "title": t, "images": images, "description": desc, "ship": 0,
+                                          "auction": False}, model, color, use)
+            if judged and (cap is None or price > cap):
+                continue
+            rows.append(({"状態": "検討中", "src": it["src"], "用途": use, "ジャンル": genre, "機種": model, "色": color,
+                          "商品の状態": "ジャンク：" + t[:30], "現在価格": price, "送料": 0, "入札数": "",
+                          "終了日時": "即決（早い者勝ち）", "上限": cap if judged else "AI未判定", "相場": "",
+                          "メモ": (memo if judged else f"{memo}／目安の上限{rough:,}円（外装C・部品代は仮）"),
+                          "seller": it.get("seller", "")}, u))
+    save_judged()
+
+    # ---- 値引き候補：売り切れ・削除なら「終了」
+    try:
+        nego_refresh(M, tabs, page)
+    except Exception as e:
+        print("値引き候補の確認でエラー:", type(e).__name__, str(e)[:100])
+    print(f"フリマのジャンク：新しい候補{len(rows)}件／出品ページを開いた{opened}件／フリマの行の確認{n}件")
+    return {"rows": rows, "cells": cells, "tabs": tabs, "gem": gem}
+
+
+# ---------------------------------------------------------------- 値引き候補（2026/11/01）
+def nego_add(M, nego):
+    """discover で見つけた値引き候補をシートに追加（同じURLは追加しない）"""
+    tabs = Tabs(M)
+    vals = tabs.get(NEGO)
+    have = {str(r[2]).strip() for r in vals[1:] if len(r) > 2}
+    today, rows = now_s(), []
+    for x in nego:
+        if x["url"] in have:
+            continue
+        have.add(x["url"])
+        rows.append([x["model"], x["title"][:60], x["url"], x["src"], x["price"], x["ask"], x["profit"], x["sold90"],
+                     NEGO_MSG.format(ask=x["ask"]), "未", today, today, ""])
+    if rows:
+        tabs.append(NEGO, rows)
+        print(f"値引き候補を{len(rows)}件追加")
+
+
+def nego_unsent(tabs):
+    """まだメールで知らせていない値引き候補 [(行, 行の中身)]"""
+    out = []
+    for i, r in enumerate(tabs.get(NEGO, fresh=True)[1:], start=2):
+        r = list(r) + [""] * (len(NEGO_HEAD) - len(r))
+        if str(r[9]).strip() == "未" and not str(r[12]).strip() and str(r[2]).startswith("http"):
+            out.append((i, r))
+    return out[:30]
+
+
+def nego_refresh(M, tabs, page):
+    vals = tabs.get(NEGO)
+    now_dt = datetime.now(JST)
+    cells, n = [], 0
+    for i, r in enumerate(vals[1:], start=2):
+        r = list(r) + [""] * (len(NEGO_HEAD) - len(r))
+        if str(r[9]).strip() not in ("未", "お願い済み", "OK") or n >= NEGO_RECHECK_MAX:
+            continue
+        last = to_dt(r[11])
+        if last and (now_dt - last).total_seconds() < NEGO_RECHECK_H * 3600:
+            continue
+        n += 1
+        try:
+            st, price, _, _, _ = _flea_status(M, page, str(r[2]).strip())
+        except Exception:
+            continue
+        if st in ("sold", "deleted"):
+            cells.append((i, 10, "終了"))
+        if st in ("sold", "deleted", "on_sale"):
+            cells.append((i, 12, now_s()))
+        if st == "on_sale" and price and num(r[4]) != price:
+            cells.append((i, 5, price))
+        time.sleep(1)
+    if cells:
+        tabs.set(NEGO, cells)
