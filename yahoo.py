@@ -24,6 +24,8 @@ import requests
 JST = ZoneInfo("Asia/Tokyo")
 PT = ZoneInfo("America/Los_Angeles")   # Gemini の1日の回数は太平洋時間の0時（日本の16〜17時）に戻る
 TAB = "ヤフオク入札"
+ARCHIVE = "ヤフオク履歴"   # 終了・見送り・負けの行の置き場（同じ出品をもう一度候補にしないために残す）
+DONE = ("終了", "見送り", "負け")
 DEVICES = "端末管理"
 PARTS = "部品表"
 REPAIR = "修理部品表"   # 2026/11/01 機種×不具合×部品・値段・購入リンク（部品代はここの値段を使う）
@@ -38,15 +40,16 @@ DUTY = 12.5
 ACTIVE = ("検討中", "入札中", "上回られた")
 MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多くなりすぎないように）
 NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク・値引き候補）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
-COL = {k: i for i, k in enumerate(["状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
-                                   "入札数", "終了日時", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
+# 2026/11/1 本人の希望で「終了日時」を一番左（A列）へ。終了・見送り・負けの行は「ヤフオク履歴」シートへ移し、残りは終了が近い順に並べる
+COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
+                                   "入札数", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
                                    "メモ", "最終更新", "ID"], start=1)}
-M_FORMULA = ('=IF(T{r}="","",IF(C{r}<>"在庫","AI未判定",IF(O{r}="","相場不足",FLOOR(O{r}*(1-(VALUE(\'設定\'!$B$7)'
-             '+VALUE(\'設定\'!$B$8)+12.5)/100)-VALUE(\'設定\'!$B$6)-N(YAHOO_MIN_PROFIT)-N(I{r}),10))))')
-P_FORMULA = ('=IF(OR(O{r}="",J{r}=""),"",ROUND(O{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
-             '-VALUE(\'設定\'!$B$6)-J{r}))')
+M_FORMULA = ('=IF(T{r}="","",IF(D{r}<>"在庫","AI未判定",IF(O{r}="","相場不足",FLOOR(O{r}*(1-(VALUE(\'設定\'!$B$7)'
+             '+VALUE(\'設定\'!$B$8)+12.5)/100)-VALUE(\'設定\'!$B$6)-N(YAHOO_MIN_PROFIT)-N(J{r}),10))))')
+P_FORMULA = ('=IF(OR(O{r}="",K{r}=""),"",ROUND(O{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
+             '-VALUE(\'設定\'!$B$6)-K{r}))')
 Q_FORMULA = ('=IF(OR(O{r}="",N{r}=""),"",ROUND(O{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
-             '-VALUE(\'設定\'!$B$6)-N{r}-N(I{r})))')
+             '-VALUE(\'設定\'!$B$6)-N{r}-N(J{r})))')
 
 # ヤフオクの「商品の状態」→ 状態ランク（AIを使わずに決める）
 COND_RANK = {"NEW": "S", "USED10": "S", "USED20": "A", "USED40": "B", "USED60": "C", "USED80": "C"}
@@ -617,6 +620,16 @@ def keywords_for(M, settings):
 
 def to_dt(v):
     s = str(v or "").strip().replace("/", "-")
+    s = re.sub(r"\.\d+(?=Z|[+-]\d{2}:?\d{2}$|$)", "", s).replace("Z", "+0000")   # 2026-11-01T03:00:00.000Z の形も読む
+    m = re.fullmatch(r"(\d{1,2})-(\d{1,2}) (\d{1,2}):(\d{2})", s)   # 年なし（11/1 12:34）
+    if m:
+        now = datetime.now(JST)
+        mo, d, h, mi = map(int, m.groups())
+        y = now.year + (1 if mo < now.month - 6 else 0) - (1 if mo > now.month + 6 else 0)
+        try:
+            return datetime(y, mo, d, h, mi, tzinfo=JST)
+        except ValueError:
+            return None
     for f in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S"):
         try:
             d = datetime.strptime(s[:25] if "T" in s else s[:19], f)
@@ -665,7 +678,7 @@ def run(M, data, mode="discover", flea=None):
     vals = tabs.get(TAB)
     now_dt = datetime.now(JST)
     cells, mails_outbid, mails_soon, ended_bid, notes = list(flea.get("cells") or []), [], [], [], []
-    known = {str(r[COL["ID"] - 1]).strip() for r in vals[1:] if len(r) >= COL["ID"]}
+    known = {str(r[COL["ID"] - 1]).strip() for r in vals[1:] if len(r) >= COL["ID"]} | archived_ids(tabs)
     found_in_search = {}
 
     # ---- 新しい出品をさがす（discoverの回だけ。3時間で全キーワードを1周）
@@ -697,7 +710,7 @@ def run(M, data, mode="discover", flea=None):
     # ---- 今ある行の更新（見送り・負け・終了・落札・購入済みは触らない）
     for i, row in enumerate(vals[1:], start=2):
         row = list(row) + [""] * (20 - len(row))
-        st, aid = str(row[0]).strip(), str(row[COL["ID"] - 1]).strip()
+        st, aid = str(row[COL["状態"] - 1]).strip(), str(row[COL["ID"] - 1]).strip()
         if st not in ACTIVE or not aid or aid.startswith("http"):   # フリマの行は flea_junk で確認
             continue
         info = None
@@ -789,9 +802,9 @@ def run(M, data, mode="discover", flea=None):
             r = start + k
             link = (f'=HYPERLINK(T{r},"{c["src"]}")' if c.get("src") else
                     f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&T{r},"ヤフオク")')
-            rows.append([c["状態"], link, c["用途"],
+            rows.append([c["終了日時"], c["状態"], link, c["用途"],
                          c["ジャンル"], c["機種"], c["色"], c["商品の状態"], c["現在価格"], c["送料"],
-                         f'=IF(H{r}="","",H{r}+N(I{r}))', c["入札数"], c["終了日時"],
+                         f'=IF(I{r}="","",I{r}+N(J{r}))', c["入札数"],
                          c["上限"] if c.get("上限") is not None else M_FORMULA.format(r=r), "", c.get("相場", ""),
                          P_FORMULA.format(r=r), Q_FORMULA.format(r=r), c["メモ"], now_s(), aid])
         tabs.append(TAB, rows)
@@ -841,6 +854,11 @@ def run(M, data, mode="discover", flea=None):
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
                 + "\n\n古物台帳と端末管理に記録しました。")
+    if mode == "discover":
+        try:
+            tidy(tabs)
+        except Exception as e:
+            print("ヤフオク入札シートの並べ替えでエラー:", type(e).__name__, str(e)[:100])
     msg = (f"{now_s()} ヤフオク（{mode}）：行の更新{len({c[0] for c in cells})}件／新しい候補{len(new_rows)}件／"
            f"上回られた{len(mails_outbid)}件／落札{len(won)}件／Gemini {'キー待ち' if not gem.key else f'今日{gem.used}回'}")
     print(msg)
@@ -849,6 +867,82 @@ def run(M, data, mode="discover", flea=None):
     except Exception:
         pass
     return gem
+
+
+def archived_ids(tabs):
+    try:
+        return {str(r[COL["ID"] - 1]).strip() for r in tabs.get(ARCHIVE)[1:] if len(r) >= COL["ID"]}
+    except Exception:
+        return set()
+
+
+def _cell_out(v):
+    """シートから読んだ値を、書き戻せる形に（日時は 2026/11/01 12:34 の形）"""
+    if isinstance(v, str) and re.match(r"\d{4}-\d{2}-\d{2}T", v):
+        d = to_dt(v)
+        return d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else v
+    return v
+
+
+def _row_formulas(row, r):
+    """行 r に置くときの数式を入れ直す（リンク・合計・参考入札額・見込み利益）"""
+    row = list(row)
+    label = str(row[COL["リンク"] - 1]).strip()
+    row[COL["リンク"] - 1] = (f'=HYPERLINK(T{r},"{label}")' if label in ("メルカリ", "Yahoo!フリマ") else
+                             f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&T{r},"ヤフオク")')
+    row[COL["合計"] - 1] = f'=IF(I{r}="","",I{r}+N(J{r}))'
+    m = row[COL["参考入札額"] - 1]
+    if str(row[COL["用途"] - 1]).strip() == "在庫" or num(m) is None:
+        row[COL["参考入札額"] - 1] = M_FORMULA.format(r=r)
+    row[COL["利益今"] - 1] = P_FORMULA.format(r=r)
+    row[COL["利益上限"] - 1] = Q_FORMULA.format(r=r)
+    return row
+
+
+def tidy(tabs):
+    """終了・見送り・負けの行を「ヤフオク履歴」へ移し、残りを終了が近い順に並べ直す（1時間ごとの回の最後に1回）。
+    入札中・上回られた・検討中が上（終了が近い順、即決のフリマはその下）、落札・購入済みは一番下"""
+    vals = tabs.get(TAB, fresh=True)
+    if len(vals) < 2:
+        return
+    n = len(COL)
+    head = vals[0]
+    rows = [list(r) + [""] * (n - len(r)) for r in vals[1:]]
+    rows = [[_cell_out(v) for v in r[:n]] for r in rows if any(str(x).strip() for x in r)]
+    done = [r for r in rows if str(r[COL["状態"] - 1]).strip() in DONE]
+    keep = [r for r in rows if str(r[COL["状態"] - 1]).strip() not in DONE]
+    far = datetime(2100, 1, 1, tzinfo=JST)
+
+    def key(r):
+        st = str(r[COL["状態"] - 1]).strip()
+        end = to_dt(r[COL["終了日時"] - 1])
+        return (0 if st in ACTIVE else 1, 0 if end else 1, end or far)
+
+    ordered = sorted(keep, key=key)
+    if not done and [r[COL["ID"] - 1] for r in ordered] == [r[COL["ID"] - 1] for r in keep]:
+        return
+    if done:
+        tabs.ensure(ARCHIVE, head)
+        arch = []
+        for r in done:
+            r = list(r)
+            aid = str(r[COL["ID"] - 1]).strip()
+            r[COL["リンク"] - 1] = aid if aid.startswith("http") else f"https://auctions.yahoo.co.jp/jp/auction/{aid}"
+            for k in ("合計", "利益今", "利益上限"):
+                r[COL[k] - 1] = ""
+            if num(r[COL["参考入札額"] - 1]) is None:
+                r[COL["参考入札額"] - 1] = ""
+            arch.append(r)
+        tabs.append(ARCHIVE, arch)
+    cells = []
+    for i, r in enumerate(ordered, start=2):
+        for c, v in enumerate(_row_formulas(r, i), start=1):
+            cells.append((i, c, v))
+    for i in range(len(ordered) + 2, len(rows) + 2):   # 移した分の下の行を空ける
+        for c in range(1, n + 1):
+            cells.append((i, c, ""))
+    tabs.set(TAB, cells)
+    print(f"ヤフオク入札：履歴へ{len(done)}件・残り{len(ordered)}件を終了が近い順に並べ替え")
 
 
 def consider(M, tabs, gem, calc, settings, it, kw, genre):
@@ -1166,7 +1260,7 @@ def flea_junk(M, data, page):
     gem = Gemini(tabs)
     vals = tabs.get(TAB)
     now_dt = datetime.now(JST)
-    known = {str(r[COL["ID"] - 1]).strip() for r in vals[1:] if len(r) >= COL["ID"]}
+    known = {str(r[COL["ID"] - 1]).strip() for r in vals[1:] if len(r) >= COL["ID"]} | archived_ids(tabs)
     excluded = M.excluded_sellers(data)
     cells, rows, opened = [], [], 0
     load_judged()
