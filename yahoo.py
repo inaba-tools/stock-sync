@@ -37,6 +37,7 @@ HEADERS = {"User-Agent": "stock-sync/1.0 (+https://github.com/inaba-tools/stock-
 DUTY = 12.5
 ACTIVE = ("検討中", "入札中", "上回られた")
 MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多くなりすぎないように）
+NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク・値引き候補）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
 COL = {k: i for i, k in enumerate(["状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
                                    "入札数", "終了日時", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
                                    "メモ", "最終更新", "ID"], start=1)}
@@ -811,7 +812,7 @@ def run(M, data, mode="discover", flea=None):
         M.alert("【ヤフオク】" + ("上回られました" if mails_outbid else "まもなく終了"), "\n\n".join(body)
                 + "\n\n入札はご自身で判断してください（自動入札はしません）")
     nego_new = nego_unsent(tabs) if mode == "discover" else []
-    if new_rows or nego_new:
+    if NEW_MAIL and (new_rows or nego_new):
         lines, flines = [], []
         for c, aid in new_rows:
             capt = f"上限 {int(c['上限']):,}円" if isinstance(c.get("上限"), (int, float)) else (
