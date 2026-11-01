@@ -431,12 +431,20 @@ SOLD_RANK = "売れた値段"   # 状態別相場シートの「状態ランク�
 SOLD_MAX_DAYS = 60   # これより古い「売れた値段」は使わない（今まで通りの計算に戻す）
 
 
+def _mkey(m):
+    return re.sub(r"[-\s]", "", str(m or "").upper())
+
+
+SOLD_MIN = 3   # 2026/11/01 本人決定：90日で売れたのがこれ未満の機種は、無在庫でもヤフオクでも扱わない
+
+
 def sold_for(tabs, model, color):
-    """状態別相場シートの「売れた値段」の行 → {"安い","ふつう","高い","件数"}（円）。無い・古いなら None。
-    色の行（902KCのピンクなど）があればそれ、無ければ色を問わない行（ピンクなど高い色を除いた値段）"""
-    mm = market_model(model)
+    """状態別相場シートの「売れた値段」の行 → {"安い","ふつう","高い","件数"}（円）。行が無い・古いなら None。
+    色の行（902KCのピンクなど）があればそれ、無ければ色を問わない行（ピンクなど高い色を除いた値段）。
+    件数が SOLD_MIN 未満の行は {"件数": n} だけ返す（＝売れていない機種）"""
+    mm = _mkey(market_model(model))
     try:
-        rows = [r for r in tabs.get(RANKMKT)[1:] if len(r) >= 8 and str(r[0]) == mm and str(r[2]) == SOLD_RANK]
+        rows = [r for r in tabs.get(RANKMKT)[1:] if len(r) >= 8 and _mkey(r[0]) == mm and str(r[2]) == SOLD_RANK]
     except Exception:
         return None
     for want in ([color, ""] if color else [""]):
@@ -446,11 +454,13 @@ def sold_for(tabs, model, color):
             d = to_dt(r[7])
             if not d or (datetime.now(JST) - d).days > SOLD_MAX_DAYS:
                 return None
+            n = int(float(r[6] or 0)) if str(r[6]).strip() else 0
+            if n < SOLD_MIN:
+                return {"件数": n}
             try:
-                v = {"安い": float(r[3]), "ふつう": float(r[4]), "高い": float(r[5]), "件数": int(float(r[6] or 0))}
+                return {"安い": float(r[3]), "ふつう": float(r[4]), "高い": float(r[5]), "件数": n}
             except (TypeError, ValueError):
                 return None
-            return v if v["件数"] >= 3 else None
     return None
 
 
@@ -464,6 +474,8 @@ def sale_for(M, tabs, model, color, rank, settings, sold_mode="cap"):
     sold = sold_for(tabs, model, color)
     if not sold:
         return sale, why
+    if sold["件数"] < SOLD_MIN:   # eBayでほとんど売れていない機種は扱わない
+        return None, f"eBayで90日に{sold['件数']}台しか売れていない"
     lv = RANK_LEVEL.get(rank, "安い")
     if sold_mode == "direct" or not sale:
         return sold[lv], f"売れた値段の{lv}側（{sold['件数']}件）"
