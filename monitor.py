@@ -1687,21 +1687,13 @@ def _main():
                 updates = []
             time.sleep(random.uniform(0.5, 1.5) if yahoo else random.uniform(1.5, 3))
 
-        # ---- 出品中なのにメルカリの状態が2回続けて読めない商品があれば知らせる（3時間に1回まで） ----
-        if unknown_twice:
-            flag = os.path.join(".cache", "unknown_alert.txt")
-            try:
-                last = float(open(flag, encoding="utf-8").read().strip() or 0)
-            except (OSError, ValueError):
-                last = 0
-            if time.time() - last > 3 * 3600:
-                alert(f"【確認】メルカリの状態を読めない出品が{len(unknown_twice)}件あります",
-                      "30分以上、メルカリで売り切れたかどうかを確認できていません。eBayで売れたら、"
-                      "仕入れ先でまだ買えるか確認してから対応してください。\n\n"
-                      + "\n".join(f"eBay {x['ebay_item_id']}：{x.get('title', '')[:30]} {x['mercari_url']}" for x in unknown_twice[:30]))
-                os.makedirs(".cache", exist_ok=True)
-                with open(flag, "w", encoding="utf-8") as fh:
-                    fh.write(str(time.time()))
+        # ---- 出品中なのにメルカリの状態が2回続けて読めない商品は、eBayの出品を終了する（2026/11/01 本人の希望。メールは送らない） ----
+        for x in unknown_twice:
+            ok, msg = stop_on_ebay(x["ebay_item_id"], token or get_access_token())
+            updates.append({"row": x["row"], "status": "stopped" if ok else None,
+                            "result": f"仕入れ先の状態を2回続けて読めなかったため出品を終了 → {msg}"})
+            if ok:
+                stopped += 1
 
         # ---- 見張る件数が増えて30分に間に合わなくなりそうなら知らせる（見張りを2本に分ける目安。7日に1回まで） ----
         if len(targets) >= SPLIT_AT:

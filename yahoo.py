@@ -36,6 +36,7 @@ HEADERS = {"User-Agent": "stock-sync/1.0 (+https://github.com/inaba-tools/stock-
 DUTY = 12.5
 ACTIVE = ("検討中", "入札中", "上回られた")
 MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多くなりすぎないように）
+YAHOO_MAIL = False   # 2026/11/01 本人の希望：ヤフオク関係のメール（上回られた・終了30分前・落札）は送らない。シートは今まで通り更新する
 NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
 # 2026/11/1 本人の希望で「終了日時」を一番左（A列）へ。終了・見送り・負けの行は「ヤフオク履歴」シートへ移し、残りは終了が近い順に並べる
 COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
@@ -895,7 +896,7 @@ def run(M, data, mode="discover", flea=None):
         body.append("【上回られた】\n" + "\n".join(mails_outbid))
     if mails_soon:
         body.append("【まもなく終了（30分前）】\n" + "\n".join(mails_soon))
-    if body:
+    if body and YAHOO_MAIL:
         M.alert("【ヤフオク】" + ("上回られました" if mails_outbid else "まもなく終了"), "\n\n".join(body)
                 + "\n\n入札はご自身で判断してください（自動入札はしません）")
     if NEW_MAIL and new_rows:
@@ -916,7 +917,7 @@ def run(M, data, mode="discover", flea=None):
         subj = "・".join(x for x in [f"フリマのジャンク{len(flines)}件" if flines else "", f"ヤフオク{len(lines)}件" if lines else ""] if x)
         M.alert(f"【仕入れ】新しい候補（{subj}）", "\n\n".join(body)
                 + "\n\n入札・購入はご自身で（自動ではしません）。")
-    if won:
+    if won and YAHOO_MAIL:
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
                 + "\n\n古物台帳と手元在庫シートに記録しました。")
@@ -1438,7 +1439,7 @@ def check_active_listings(M, per_run=5, settings=None):
             ups.append({"row": i, "status": "stopped" if ok else None, "result": f"AIの確認で問題あり（{why}）のため出品を終了 → {msg}"})
         M.sheet("update", updates=ups)
     print(f"出品中の状態の確認：{done}件（eBayの状態の説明を書き換え{revised}件・問題ありで出品終了{len(stops)}件）")
-    if flagged:
+    if flagged and False:   # 2026/11/01 本人の希望：このメールは送らない（結果は無在庫商品リスト・履歴シートに残る）
         M.alert("【AI確認】出品中の商品で問題があったもの", "\n".join(flagged[:40]) +
                 "\n\n問題あり（本体ではない・型番違い・故障など）と、状態の相場では利益2,000円の値段で売れにくいものは、出品を終了しました。")
 
