@@ -385,7 +385,8 @@ def rank_market_usd(M, model, title, rank, settings):
     if _TABS[0] is None:
         _TABS[0] = Tabs(M)
     color = color_of(title)
-    sale, why = sale_for(M, _TABS[0], model, "" if color == "複数色" else color, rank or UNKNOWN_RANK, settings)
+    sale, why = sale_for(M, _TABS[0], model, "" if color == "複数色" else color, rank or UNKNOWN_RANK, settings,
+                         sold_mode="direct")   # 無在庫は売れてから仕入れるので、売れた値段をそのまま使う
     if not sale:
         return None, why
     return sale / M.usd_jpy(settings), why
@@ -426,7 +427,52 @@ _mkt_ts = {}
 _mkt_loaded = [False]
 
 
-def sale_for(M, tabs, model, color, rank, settings):
+SOLD_RANK = "売れた値段"   # 状態別相場シートの「状態ランク」がこれの行＝eBayで実際に売れた値段（Terapeak・過去90日、月1回更新）
+SOLD_MAX_DAYS = 60   # これより古い「売れた値段」は使わない（今まで通りの計算に戻す）
+
+
+def sold_for(tabs, model, color):
+    """状態別相場シートの「売れた値段」の行 → {"安い","ふつう","高い","件数"}（円）。無い・古いなら None。
+    色の行（902KCのピンクなど）があればそれ、無ければ色を問わない行（ピンクなど高い色を除いた値段）"""
+    mm = market_model(model)
+    try:
+        rows = [r for r in tabs.get(RANKMKT)[1:] if len(r) >= 8 and str(r[0]) == mm and str(r[2]) == SOLD_RANK]
+    except Exception:
+        return None
+    for want in ([color, ""] if color else [""]):
+        for r in rows:
+            if str(r[1]) != want:
+                continue
+            d = to_dt(r[7])
+            if not d or (datetime.now(JST) - d).days > SOLD_MAX_DAYS:
+                return None
+            try:
+                v = {"安い": float(r[3]), "ふつう": float(r[4]), "高い": float(r[5]), "件数": int(float(r[6] or 0))}
+            except (TypeError, ValueError):
+                return None
+            return v if v["件数"] >= 3 else None
+    return None
+
+
+def sale_for(M, tabs, model, color, rank, settings, sold_mode="cap"):
+    """(円, 根拠)。今まで通りの見込み（_sale_est）に、eBayで実際に売れた値段（sold_for）を合わせる。
+    2026/11/01 本人と決定：ヤフオク（先に買う）は売れた値段を上限にする（sold_mode="cap"）、
+    無在庫（売れてから買う）は売れた値段をそのまま使う（sold_mode="direct"）"""
+    sale, why = _sale_est(M, tabs, model, color, rank, settings)
+    if why.startswith("自分の実績"):
+        return sale, why
+    sold = sold_for(tabs, model, color)
+    if not sold:
+        return sale, why
+    lv = RANK_LEVEL.get(rank, "安い")
+    if sold_mode == "direct" or not sale:
+        return sold[lv], f"売れた値段の{lv}側（{sold['件数']}件）"
+    if sale > sold[lv]:
+        return sold[lv], f"売れた値段の{lv}側で上限（{sold['件数']}件）"
+    return sale, why
+
+
+def _sale_est(M, tabs, model, color, rank, settings):
     """(円, 根拠) 。①売上シートの自分の実績 ②状態別相場シート（AIで判定した分）③日本から出品中×補正。足りなければ (None, 理由)"""
     mm = market_model(model)
     # ① 自分の実績（売上シート：B機種・C商品名・F売れた値段(円)・W状態）
@@ -1792,6 +1838,7 @@ def weekly_rank_market(M, data):
         json.dump(graded, open(cache_f, "w", encoding="utf-8"))
     except OSError:
         pass
+    out += [list(r) for r in vals[1:] if len(r) > 2 and str(r[2]) == SOLD_RANK]   # 月1回の「売れた値段」の行は残す
     M.sheet("tab_replace", name=RANKMKT, values=out)
 
 
