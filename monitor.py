@@ -696,6 +696,7 @@ OTHER_CAMERAS = {
     "SX620": ("Canon", "Canon PowerShot", "Canon PowerShot SX620 HS"),
     "SX720": ("Canon", "Canon PowerShot", "Canon PowerShot SX720 HS"),
     # 2026/11/01 追加（安い出品だけ利益が出る。仕入れ上限・利益の判定はいつも通り）
+    "S6900": ("Nikon", "Nikon Coolpix", "Nikon COOLPIX S6900"),   # 2026/11/01 追加（仕入れ2万円超・利益の目安8,000円）
     "SX610": ("Canon", "Canon PowerShot", "Canon PowerShot SX610 HS"),
     "SX710": ("Canon", "Canon PowerShot", "Canon PowerShot SX710 HS"),
 }
@@ -977,7 +978,7 @@ def cap_for(q):
     2026/10/29 無料出品枠が1,000件（ベーシックストア）の間は、売れにくい機種も含めて全機種20件まで出す。
     250件の無料プランに戻したら以前のルール：90日の販売台数÷4、最低3件・最大20件"""
     return 10 ** 6   # 2026/11/01 本人の希望：機種ごとの上限は設けない（状態の相場で利益が出るものは全部出す。全体の無料出品枠は別に守る）
-MAX_COST_DEFAULT = 20000      # 仕入れ値の上限（円）。設定シートで max_cost を渡せばそちらを優先
+MAX_COST_DEFAULT = 50000      # 仕入れ値の上限（円）。2026/11/01 本人決定で2万→5万円（高い商品ほど最低利益を上げる：tier_profit）
 PROFIT_RATIO = 0              # 2026/10/22 仕入れ値の割合はやめて、最低利益（2,000円・広告付きは1,500円）だけにした（以前は0.3）
 
 
@@ -996,8 +997,18 @@ def max_cost(settings):
         return MAX_COST_DEFAULT
 
 
+def tier_profit(cost, settings=None):
+    """2026/11/01 本人決定：仕入れ値ごとの最低利益。2万円以下は設定B14（2,000円）、3万円以下3,000円・4万円以下4,000円・5万円以下5,000円"""
+    base = float((settings or {}).get("min_profit") or 2000)
+    try:
+        c = float(cost or 0)
+    except (TypeError, ValueError):
+        c = 0
+    return max(base, math.ceil(c / 10000) * 1000) if c > 20000 else base
+
+
 def min_profit_for(cost, settings, model=""):
-    base = max(float(settings.get("min_profit") or 2000), float(cost or 0) * PROFIT_RATIO)
+    base = max(tier_profit(cost, settings), float(cost or 0) * PROFIT_RATIO)
     if (model or "").strip().upper() in GAMEBOY_MODELS:
         base = max(base, GAMEBOY_MIN_PROFIT)
     elif (model or "").strip().upper() in RETRO_MODELS:
@@ -1692,7 +1703,7 @@ def _main():
                         upd.update(research_row(r, info, settings))
                         researched += 1
                         # 利益が少ない・相場の件数が少ないものは候補から外す
-                        min_profit = float(settings.get("min_profit") or 2000)
+                        min_profit = min_profit_for(info.get("price") or r.get("cost") or 0, settings, r.get("query") or "")
                         low_profit = "profit" in upd and upd["profit"] <= min_profit
                         few = upd.get("ebay_count") not in (None, "") and int(upd["ebay_count"]) < MIN_COUNT
                         if low_profit or few:
@@ -2069,7 +2080,7 @@ def floor_price_usd(cost, query, settings, profit=None):
     """利益がちょうど profit 円（省略時は2,000円）残る値段。2026/10/26 出品・値下げはすべてこの値段にそろえる"""
     # 2026/10/31 返すのは「アメリカの人が払う合計（商品＋送料・関税）」。相場（ほぼ送料無料の値段）と比べるため
     fx, F, d = usd_jpy(settings), fee_rate(settings, query), duty_pct(settings) / 100
-    min_profit = PRICE_FLOOR_PROFIT if profit is None else profit
+    min_profit = max(PRICE_FLOOR_PROFIT, tier_profit(cost)) if profit is None else profit   # 2026/11/01 高い商品は仕入れ値に応じた利益
     if REGION_SHIP_MODE != "all":   # 切り替え前：今まで通り
         return math.ceil((float(cost) + ship_for(settings, query) + min_profit) / max(0.05, 1 - F - d) / fx) - 0.01
     item = (float(cost) + min_profit) / (1 - F) / fx
@@ -3449,7 +3460,7 @@ def discover():
                 if sale is None:
                     continue
                 p, rate = profit(it["price"], sale, settings, q)
-                if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
+                if rate >= min_margin and p >= max(min_profit, min_profit_for(it["price"], settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
                                   "profit": p, "margin": rate, "memo": f"自動発見（状態{rk}の相場）",
@@ -3489,7 +3500,7 @@ def discover():
                 if sale is None:
                     continue
                 p, rate = profit(it["price"], sale, settings, q)
-                if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
+                if rate >= min_margin and p >= max(min_profit, min_profit_for(it["price"], settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
                                   "profit": p, "margin": rate, "memo": f"自動発見（Yahoo!フリマ・状態{rk}の相場）",
