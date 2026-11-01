@@ -2905,6 +2905,14 @@ def create_listing(r, info, detail, settings, token):
     model, unlocked, carrier, color, title_en, cond_en, desc_html = (
         t["model"], t["unlocked"], t["carrier"], t["color"], t["title_en"], t["cond_en"], t["desc_html"])
     target, floor = market_price_usd(cost, model, settings)
+    ai = {}
+    try:   # 2026/11/01 出品直前にAIで見た状態ランクの相場を使う
+        import yahoo
+        ai = yahoo.LAST_AI.get(r.get("mercari_url", ""), {}) or {}
+        if ai.get("usd"):
+            target = math.floor(ai["usd"]) + 0.99
+    except Exception:
+        ai = {}
     if target is None:
         if EBAY_LIMITED[0]:
             return None, "LIMITWAIT"   # eBayの1日の問い合わせ上限：外さずに次の回で出品する
@@ -2917,6 +2925,12 @@ def create_listing(r, info, detail, settings, token):
         return None, "写真をeBayに取り込めなかったため出品を中止しました（もう一度チェックすると再挑戦します）"
 
     cond_id = 1000 if "新品" in detail.get("condition", "") else 3000
+    if ai.get("rank") in ("S", "A", "B", "C") and cond_id != 1000:   # 状態の説明をAIのランクと英語の説明に
+        try:
+            import yahoo
+            cond_en = yahoo.condition_text_en(ai["rank"], ai.get("note_en", ""), cond_en)
+        except Exception:
+            pass
     gi = game_info(model)
     if gi:
         category_id = gi.get("ebay_cat", GAME_EBAY_CATEGORY)
@@ -3101,7 +3115,8 @@ def yahoo_search(keyword, settings=None, max_price=None, max_items=500):
             if it.get("condition") == "used80":
                 continue          # 全体的に状態が悪い
             out.append({"url": f"https://paypayfleamarket.yahoo.co.jp/item/{it['id']}",
-                        "title": it.get("title", ""), "price": it.get("price"), "seller": it.get("sellerId", "")})
+                        "title": it.get("title", ""), "price": it.get("price"), "seller": it.get("sellerId", ""),
+                        "cond": it.get("condition", "")})
         if len(items) < 100 or (max_price and (items[-1].get("price") or 0) > max_price):
             break             # 最後のページ、または仕入れ上限より高くなったら終わり
         offset += 100
@@ -3220,6 +3235,21 @@ def find_alternative(page, query, sold_usd, settings, skip=()):
     return best
 
 
+def rank_of_search_item(it):
+    """検索結果の出品の状態ランク（Yahoo!フリマは申告の状態から。メルカリの検索結果には状態が無いので B）"""
+    import yahoo
+    return yahoo.declared_rank(it.get("cond", "")) or yahoo.UNKNOWN_RANK
+
+
+def rank_sale(q, title, rank, settings):
+    """状態ランクの相場（$・シートの「eBay相場($)」と同じ補正前の形）。相場不足なら (None, 理由)"""
+    try:
+        import yahoo
+        return yahoo.rank_market_raw_usd(sys.modules[__name__], q, title, rank, settings)
+    except Exception as e:
+        return None, f"状態の相場でエラー（{type(e).__name__}）"
+
+
 _mon_check = {"t": 0, "busy": False}
 
 
@@ -3330,11 +3360,16 @@ def discover():
                     continue
                 if game_info(q) and game_reject_reason(it["title"], q, it["price"], sale, settings):
                     continue   # ゲーム機は商品名で本体かどうかを厳しく確認
+                # 2026/11/01 相場は「機種×色×状態ランク」で見る（Yahoo!フリマは申告の状態、メルカリは分からないのでB）
+                rk = rank_of_search_item(it)
+                sale, rwhy = rank_sale(q, it["title"], rk, settings)
+                if sale is None:
+                    continue
                 p, rate = profit(it["price"], sale, settings, q)
                 if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
-                                  "profit": p, "margin": rate, "memo": "自動発見",
+                                  "profit": p, "margin": rate, "memo": f"自動発見（状態{rk}の相場）",
                                   "result": f"自動発見 {now()}"})
             # Yahoo!フリマも同じキーワードで探す
             try:
@@ -3365,11 +3400,16 @@ def discover():
                     continue
                 if game_info(q) and game_reject_reason(it["title"], q, it["price"], sale, settings):
                     continue
+                # 2026/11/01 相場は「機種×色×状態ランク」で見る（Yahoo!フリマは申告の状態、メルカリは分からないのでB）
+                rk = rank_of_search_item(it)
+                sale, rwhy = rank_sale(q, it["title"], rk, settings)
+                if sale is None:
+                    continue
                 p, rate = profit(it["price"], sale, settings, q)
                 if rate >= min_margin and p >= max(min_profit, min_profit_for(0, settings, q)):
                     found.append({"mercari_url": u, "title": it["title"], "cost": it["price"],
                                   "ebay_usd": sale, "ebay_count": n, "query": q,
-                                  "profit": p, "margin": rate, "memo": "自動発見（Yahoo!フリマ）",
+                                  "profit": p, "margin": rate, "memo": f"自動発見（Yahoo!フリマ・状態{rk}の相場）",
                                   "result": f"自動発見 {now()}"})
             time.sleep(random.uniform(4, 7))   # メルカリに止められないよう、検索ごとに少し待つ
         flea = None
@@ -3887,6 +3927,18 @@ if __name__ == "__main__":
                 a = ebay_active_items(tk).get(iid, {})
                 print(iid, a, trading_call("ReviseFixedPriceItem",
                       f"<Item><ItemID>{iid}</ItemID><StartPrice>{a['price']:.2f}</StartPrice></Item>", tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "airecheck":   # 2026/11/01 今ある候補・出品をまとめてAIで見る（無料枠の範囲で）
+            import yahoo
+            data = sheet("list")
+            st = data.get("settings", {})
+            tabs = yahoo.Tabs(sys.modules[__name__])
+            gem = yahoo.Gemini(tabs)
+            calc = yahoo.Calc(st, yahoo.setting_map(tabs.get("設定")))
+            n1 = yahoo.ai_recheck_bids(sys.modules[__name__], tabs, gem, calc, st, limit=150, pace=4.5)
+            print("ヤフオク入札をAIで確認:", n1, "件")
+            yahoo.check_active_listings(sys.modules[__name__], per_run=200, settings=st)
+            yahoo.tidy(tabs)
+            yahoo.save_mkt()
         elif len(sys.argv) > 1 and sys.argv[1] == "createpolicy":
             create_region_policy()
         elif len(sys.argv) > 1 and sys.argv[1] == "regiontest":

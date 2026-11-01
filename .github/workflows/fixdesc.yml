@@ -1,4 +1,4 @@
-name: 1回だけの作業（説明文の作り直し）
+name: 1回だけの作業
 
 on:
   workflow_dispatch:          # 手動実行のみ
@@ -32,9 +32,9 @@ jobs:
 
       - run: python -m playwright install --with-deps chromium
 
-      - name: 国ごとの送料の確認（2026/10/31）
+      - name: 今ある候補・出品をまとめてAIで状態確認（2026/11/01）
         run: |
-          python monitor.py regiontest 366737879068
+          python monitor.py airecheck
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
@@ -42,3 +42,4 @@ jobs:
           SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
           SHEET_API_KEY: ${{ secrets.SHEET_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # 無料枠のみ

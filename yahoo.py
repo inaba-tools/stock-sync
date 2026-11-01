@@ -269,6 +269,9 @@ def ebay_cond_market(M, model, color, settings):
     """売れた値段は公式APIで自由に取れないため、日本から出品中（中国などの安い・高い出品を除く）の価格×補正を使う。
     戻り値 {"安い","ふつう","高い","件数","根拠"}（円・補正後）。件数が5件未満なら None（相場不足）"""
     key = (market_model(model), color)
+    if not _mkt_loaded[0]:
+        _mkt_loaded[0] = True
+        _load_mkt()
     if key in _mkt:
         return _mkt[key]
     gi = M.game_info(model) or {}
@@ -310,10 +313,80 @@ def ebay_cond_market(M, model, color, settings):
     except Exception as e:
         print("eBay相場（状態別）の取得に失敗:", str(e)[:100])
     _mkt[key] = res
+    _mkt_ts[key] = time.time()
+    if len(_mkt) % 10 == 0:
+        save_mkt()
     return res
 
 
 RANK_LEVEL = {"S": "高い", "A": "ふつう", "B": "安い", "C": "安い"}
+RANK_EN = {"S": "Like new - no visible signs of use", "A": "Excellent - very light signs of use",
+           "B": "Good - light scratches and normal signs of use", "C": "Fair - noticeable scratches or wear"}
+DECLARED = [("未使用に近い", "S"), ("新品", "S"), ("未使用", "S"), ("目立った傷や汚れなし", "A"), ("やや傷や汚れあり", "B"),
+            ("全体的に状態が悪い", "C"), ("傷や汚れあり", "C")]
+UNKNOWN_RANK = "B"   # 2026/11/01 状態が分からない出品（メルカリの検索結果など）は B（安めの相場）として判断する
+MKT_FILE = os.path.join(".cache", "cond_market.json")
+MKT_TTL_H = 12
+
+
+def declared_rank(cond):
+    """出品者が申告した「商品の状態」→ S/A/B/C（AIを使わない）。分からなければ ''"""
+    c = unicodedata.normalize("NFKC", str(cond or "")).strip()
+    if c.upper() in COND_RANK:
+        return COND_RANK[c.upper()]
+    for jp, rk in DECLARED:
+        if jp in c:
+            return rk
+    return ""
+
+
+_TABS = [None]
+
+
+def rank_market_usd(M, model, title, rank, settings):
+    """状態ランクの相場（$・補正後＝実際に売れる値段の目安）と根拠。相場不足なら (None, 理由)"""
+    if _TABS[0] is None:
+        _TABS[0] = Tabs(M)
+    color = color_of(title)
+    sale, why = sale_for(M, _TABS[0], model, "" if color == "複数色" else color, rank or UNKNOWN_RANK, settings)
+    if not sale:
+        return None, why
+    return sale / M.usd_jpy(settings), why
+
+
+def rank_market_raw_usd(M, model, title, rank, settings):
+    """シートの「eBay相場($)」に入れる値（補正前の形。profit() が補正をかけるので割り戻しておく）"""
+    usd, why = rank_market_usd(M, model, title, rank, settings)
+    if usd is None:
+        return None, why
+    return round(usd / (float(settings.get("market_adj") or 80) / 100), 2), why
+
+
+def _load_mkt():
+    try:
+        with open(MKT_FILE) as f:
+            d = json.load(f)
+        now = time.time()
+        for k, (ts, v) in d.items():
+            if now - ts < MKT_TTL_H * 3600:
+                m, _, c = k.partition("|")
+                _mkt[(m, c)] = v
+                _mkt_ts[(m, c)] = ts
+    except Exception:
+        pass
+
+
+def save_mkt():
+    try:
+        os.makedirs(".cache", exist_ok=True)
+        with open(MKT_FILE, "w") as f:
+            json.dump({f"{m}|{c}": [_mkt_ts.get((m, c), time.time()), v] for (m, c), v in _mkt.items()}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+_mkt_ts = {}
+_mkt_loaded = [False]
 
 
 def sale_for(M, tabs, model, color, rank, settings):
@@ -344,6 +417,8 @@ def sale_for(M, tabs, model, color, rank, settings):
         pass
     # ③ 日本から出品中×補正（ランクごとの区別はまだ無いので、Sは高め・Aは真ん中・B/Cは安めの値段を使う）
     mk = ebay_cond_market(M, model, color, settings)
+    if not mk and color:   # 色ごとでは件数が足りない → 色を問わない相場（安い側）で見る
+        mk, color = ebay_cond_market(M, model, "", settings), ""
     if not mk:
         return None, "相場不足"
     lv = RANK_LEVEL.get(rank, "安い") if color else "安い"   # 色が分からないときは安い側（色で相場が大きく違うため）
@@ -450,8 +525,10 @@ LISTING_PROMPT = """中古品をeBayに出品する前の確認です。日本�
 タイトル：{title}
 商品の状態（出品者の申告）：{cond}
 説明文：{desc}
+状態ランク：S=新品同様・使用感なし／A=キズほぼなし／B=使用感・小キズあり／C=目立つキズ・色あせ・欠け／ジャンク=故障。写真を優先して厳しめに付ける。
 答えの形：{{"ok":true/false,"reason":"出品しない理由（ok=falseのとき・30字以内）","rank":"S/A/B/C/ジャンク",
-"color_in_photo":"写真の本体の色","note":"気になる点（30字以内）"}}
+"color_in_photo":"写真の本体の色","note":"気になる点（30字以内・日本語）",
+"note_en":"海外の買い手向けの状態の説明（英語・150字以内。写真から分かるキズや使用感を正直に）"}}
 ok=false にするのは：状態の申告と写真が明らかに違う／タイトルと写真の色が違う／背面などに大きなダメージ／本体が写っていない・本体なしに見える／ジャンク・故障の記載 のどれか。"""
 
 RANK_PROMPT = """eBayで売られている中古品（{model}）の写真と説明文から、状態ランクをJSONだけで答えてください。
@@ -843,6 +920,11 @@ def run(M, data, mode="discover", flea=None):
         M.alert(f"【ヤフオク】落札 {len(won)}件", "\n".join(f"・{r[COL['機種'] - 1]} {r[COL['色'] - 1]} {int(p):,}円 "
                                                           f"https://auctions.yahoo.co.jp/jp/auction/{a}" for _, a, r, p, _ in won)
                 + "\n\n古物台帳と手元在庫シートに記録しました。")
+    if mode in ("discover", "soon"):
+        try:   # 2026/11/01 在庫の行をAIで見て、状態ランクの相場に直す（1回10件まで）
+            ai_recheck_bids(M, tabs, gem, calc, settings or {}, limit=10)
+        except Exception as e:
+            print("ヤフオク入札のAI確認でエラー:", type(e).__name__, str(e)[:100])
     if mode in ("discover", "soon"):   # 2026/11/01 30分ごとの見張りの回でも並べ直す（いつも終了が近い順に）
         try:
             tidy(tabs)
@@ -886,6 +968,53 @@ def _row_formulas(row, r):
     row[COL["利益今"] - 1] = P_FORMULA.format(r=r)
     row[COL["利益上限"] - 1] = Q_FORMULA.format(r=r)
     return row
+
+
+def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
+    """ヤフオク入札の「在庫」の行（入札・検討中）をAIで1回だけ見て、状態ランクでeBay相場（O列）を出し直す。
+    ダメな出品は「見送り」。2026/11/01 本人の希望：相場は状態を加味したものにする"""
+    vals = tabs.get(TAB, fresh=True)
+    load_judged()
+    cells, n = [], 0
+    for i, row in enumerate(vals[1:], start=2):
+        if n >= limit or not gem.available(2):
+            break
+        row = list(row) + [""] * (len(COL) - len(row))
+        st, aid, use = str(row[COL["状態"] - 1]).strip(), str(row[COL["ID"] - 1]).strip(), str(row[COL["用途"] - 1]).strip()
+        if st not in ACTIVE or use != "在庫" or not aid or aid.startswith("http") or ("stock:" + aid) in _judged:
+            continue
+        try:
+            d = y_item(aid)
+        except Exception:
+            continue
+        if not d or d.get("closed") or not d.get("images"):
+            continue
+        model, color = str(row[COL["機種"] - 1]), str(row[COL["色"] - 1])
+        ans = gem.ask(2, LISTING_PROMPT.format(model=model, title=d["title"], cond=d.get("cond_name", ""),
+                                               desc=(d.get("description") or "")[:1500]), d["images"][:4])
+        if ans is None:
+            break
+        n += 1
+        if pace:
+            time.sleep(pace)
+        rank = str(ans.get("rank") or "").strip().upper()
+        note = str(ans.get("note") or ans.get("reason") or "")[:40]
+        _judged["stock:" + aid] = [rank, note, datetime.now(JST).strftime("%Y-%m-%d")]
+        if ans.get("ok") is False or rank == "ジャンク":
+            cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], f"AI：{ans.get('reason') or note}（{rank}）")]
+            continue
+        if rank not in ("S", "A", "B", "C"):
+            continue
+        sale, why = sale_for(M, tabs, model, color, rank, settings)
+        if not sale:
+            cells += [(i, COL["eBay相場"], ""), (i, COL["メモ"], f"AI{rank}：相場不足（{why}）／{note}")]
+            continue
+        cells += [(i, COL["eBay相場"], round(sale)), (i, COL["商品の状態"], f"{rank}（AI）：{note}"[:40]),
+                  (i, COL["メモ"], f"AI{rank}相場{int(sale):,}円（{why}）")]
+    save_judged()
+    if cells:
+        tabs.set(TAB, cells)
+    return n
 
 
 def tidy(tabs):
@@ -1072,9 +1201,27 @@ def label_text(no, model, color, state):
 _gate_gem = [None]
 
 
+LAST_AI = {}   # 仕入れ先URL → {"rank","note","note_en","usd"}（出品の直前に見た結果。eBayの状態の説明・相場に使う）
+
+
+def _list_cells(tabs, row, rank, note, raw_usd):
+    """無在庫商品リストの行に、状態ランク（AI）・気になる点（AI）・eBay相場($)（状態の相場）を書く（見出しで列を探す）"""
+    try:
+        head = [str(h).strip() for h in tabs.get("無在庫商品リスト")[0]]
+        cells = []
+        for name, v in (("状態ランク（AI）", rank), ("気になる点（AI）", note), ("eBay相場($)", raw_usd)):
+            if name in head and v not in (None, ""):
+                cells.append((row, head.index(name) + 1, v))
+        if cells:
+            tabs.set("無在庫商品リスト", cells)
+    except Exception as e:
+        print("無在庫商品リストへの書き込みでエラー:", type(e).__name__, str(e)[:80])
+
+
 def listing_gate(M, r, info, detail, settings=None):
     """None：出品してよい（キーが無いときは今まで通り）／("SKIP", 理由)／("WAIT", 理由)
-    2026/11/01 AIが見た状態ランク（S/A/B/C）の相場でも、利益2,000円の値段で売れるかを確かめる（売れない値段なら出品しない）"""
+    2026/11/01 AIで状態ランク（S/A/B/C）を決め、そのランクの相場で利益2,000円の値段で売れるかを確かめる。
+    結果は無在庫商品リストのI列（状態ランク）・V列（気になる点）・K列（状態の相場）に書き、eBayの状態の説明にも使う"""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return None
     if _gate_gem[0] is None:
@@ -1082,35 +1229,63 @@ def listing_gate(M, r, info, detail, settings=None):
     gem = _gate_gem[0]
     if not gem.available(1):
         return ("WAIT", "AIの確認の今日の回数を使い切ったため、明日出品します")
-    ans = gem.ask(1, LISTING_PROMPT.format(model=r.get("query") or "", title=(info or {}).get("title", r.get("title", "")),
+    title = (info or {}).get("title", r.get("title", ""))
+    ans = gem.ask(1, LISTING_PROMPT.format(model=r.get("query") or "", title=title,
                                            cond=(detail or {}).get("condition", ""),
                                            desc=((detail or {}).get("description") or "")[:1500]),
                   (detail or {}).get("images", [])[:4])
     if ans is None:
         return ("WAIT", "AIの確認ができなかったため、次の回に出品します") if gem.blocked else None
-    if ans.get("ok") is False:
-        return ("SKIP", f"【AI確認】出品しません：{str(ans.get('reason', ''))[:40]}（{ans.get('rank', '')}）")
     rank = str(ans.get("rank") or "").strip().upper()
+    note = str(ans.get("note") or ans.get("reason") or "")[:60]
+    if ans.get("ok") is False:
+        _list_cells(gem.tabs, r.get("row"), rank, note, None)
+        return ("SKIP", f"【AI確認】出品しません：{str(ans.get('reason', ''))[:40]}（{rank}）")
     if rank == "ジャンク":
+        _list_cells(gem.tabs, r.get("row"), rank, note, None)
         return ("SKIP", "【AI確認】出品しません：写真・説明文からジャンク扱い")
-    if settings and rank in ("S", "A", "B", "C"):
+    if rank not in ("S", "A", "B", "C"):
+        rank = declared_rank((detail or {}).get("condition", "")) or UNKNOWN_RANK
+    usd = raw = None
+    if settings:
         try:
             model = r.get("query") or ""
-            title = (info or {}).get("title", r.get("title", ""))
             cost = float((info or {}).get("price") or 0)
-            sale, why = sale_for(M, gem.tabs, model, color_of(title), rank, settings)
-            if sale and cost:
+            usd, why = rank_market_usd(M, model, title, rank, settings)
+            raw, _ = rank_market_raw_usd(M, model, title, rank, settings)
+            if usd is None:
+                _list_cells(gem.tabs, r.get("row"), rank, note, None)
+                return ("SKIP", f"【AI確認】状態{rank}の相場が足りないため出品しません（{why}）")
+            if cost:
                 floor = M.floor_price_usd(cost, model, settings)
-                if sale / M.usd_jpy(settings) < floor:
-                    return ("SKIP", f"【AI確認】状態{rank}の相場は約{int(sale):,}円（{why}）で、"
+                if usd < floor:
+                    _list_cells(gem.tabs, r.get("row"), rank, note, raw)
+                    return ("SKIP", f"【AI確認】状態{rank}の相場は約{int(usd * M.usd_jpy(settings)):,}円（{why}）で、"
                                     f"利益2,000円の値段（約{int(floor * M.usd_jpy(settings)):,}円）では売れにくいので出品しません")
         except Exception as e:
             print("状態別の相場の確認でエラー（今まで通り出品）:", type(e).__name__, str(e)[:80])
+    _list_cells(gem.tabs, r.get("row"), rank, note, raw)
+    LAST_AI[r.get("mercari_url", "")] = {"rank": rank, "note": note, "note_en": str(ans.get("note_en") or "")[:300],
+                                         "usd": usd}
     return None
 
 
+def condition_text_en(rank, note_en, declared_en=""):
+    """eBayの状態の説明（ConditionDescription）"""
+    parts = [f"Condition rank {rank}: {RANK_EN.get(rank, '')}."]
+    if note_en:
+        parts.append(note_en.strip())
+    if declared_en:
+        parts.append(f"Seller's note: {declared_en.strip()}")
+    parts.append("Please check all photos for the exact condition.")
+    return " ".join(parts)[:900]
+
+
 # ---------------------------------------------------------------- ⑩ 出品中の商品の状態（余った回数で少しずつ）
-def check_active_listings(M, per_run=5):
+def check_active_listings(M, per_run=5, settings=None):
+    """出品中の商品をAIで見て、状態ランク・気になる点・状態の相場（eBay相場$）を無在庫商品リストに書く。
+    2026/11/01 eBayの出品の「状態の説明」もAIのランクに合わせて書き換える。
+    状態の相場で利益2,000円の値段だと売れにくいものは、気になる点に【状態的に売れにくい】と付けるだけ（終了・値下げはしない）"""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return
     tabs = Tabs(M)
@@ -1122,35 +1297,105 @@ def check_active_listings(M, per_run=5):
     if "状態ランク（AI）" not in head:
         return
     rc, nc = head.index("状態ランク（AI）") + 1, head.index("気になる点（AI）") + 1
-    done, cells, flagged = 0, [], []
+    uc = head.index("eBay相場($)") + 1 if "eBay相場($)" in head else None
+    col = {k: head.index(k) for k in ("商品仕入元URL", "eBay出品番号", "状態", "商品名", "仕入れ値(円)", "検索語") if k in head}
+    todo = []
     for i, row in enumerate(vals[1:], start=2):
-        if done >= per_run or not gem.available(4):
-            break
         row = list(row) + [""] * (len(head) - len(row))
-        if str(row[3]) != "active" or not str(row[2]).strip() or str(row[rc - 1]).strip():
+        if str(row[col["状態"]]) != "active" or not str(row[col["eBay出品番号"]]).strip() or str(row[rc - 1]).strip():
             continue
-        url = str(row[1])
+        todo.append((i, row))
+    if not todo:
+        return
+    if settings is None:
         try:
-            if "yahoo" in url:
-                _, info, detail = M.check_yahoo(url)
-            else:
-                continue   # メルカリはブラウザが要るので、Yahoo!フリマの出品から（メルカリ分は見張りの回で順次）
+            settings = M.sheet("list").get("settings", {})
         except Exception:
-            continue
-        ans = gem.ask(4, LISTING_PROMPT.format(model=row[12], title=row[7], cond=(detail or {}).get("condition", ""),
-                                               desc=((detail or {}).get("description") or "")[:1500]),
-                      (detail or {}).get("images", [])[:4])
-        if not ans:
-            break
-        done += 1
-        cells += [(i, rc, ans.get("rank", "")), (i, nc, str(ans.get("note") or ans.get("reason") or "")[:60])]
-        if ans.get("ok") is False:
-            flagged.append(f"・{row[7][:30]}（eBay {row[2]}）：{ans.get('reason', '')}")
+            settings = {}
+    token = None
+    pw = browser = page = None
+    done, cells, flagged, revised = 0, [], [], 0
+    try:
+        for i, row in todo:
+            if done >= per_run or not gem.available(4 if per_run < 50 else 2):
+                break
+            url = str(row[col["商品仕入元URL"]])
+            try:
+                if "mercari" in url:
+                    if page is None:
+                        from playwright.sync_api import sync_playwright
+                        pw = sync_playwright().start()
+                        browser = pw.chromium.launch(headless=True)
+                        page = browser.new_page(locale="ja-JP", user_agent=(
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"))
+                    st, _, _, images, desc = _flea_status(M, page, url)
+                    detail = {"images": images, "description": desc,
+                              "condition": (page.evaluate(M.DETAIL_JS) or {}).get("condition", "") if st == "on_sale" else ""}
+                else:
+                    _, _, detail = M.check_yahoo(url)
+            except Exception:
+                continue
+            if not detail or not detail.get("images"):
+                continue
+            model, title = str(row[col["検索語"]]), str(row[col["商品名"]])
+            ans = gem.ask(4 if per_run < 50 else 2,
+                          LISTING_PROMPT.format(model=model, title=title, cond=detail.get("condition", ""),
+                                                desc=(detail.get("description") or "")[:1500]), detail.get("images", [])[:4])
+            if not ans:
+                break
+            done += 1
+            if per_run >= 50:
+                time.sleep(4.5)   # 1分15回までの決まりに収める
+            rank = str(ans.get("rank") or "").strip().upper()
+            note = str(ans.get("note") or ans.get("reason") or "")[:50]
+            if rank not in ("S", "A", "B", "C"):
+                rank = rank or declared_rank(detail.get("condition", "")) or UNKNOWN_RANK
+            raw = None
+            if rank in ("S", "A", "B", "C") and settings:
+                try:
+                    usd, why = rank_market_usd(M, model, title, rank, settings)
+                    raw, _ = rank_market_raw_usd(M, model, title, rank, settings)
+                    cost = float(str(row[col["仕入れ値(円)"]]).replace(",", "") or 0)
+                    if usd is not None and cost and usd < M.floor_price_usd(cost, model, settings):
+                        note = f"【状態的に売れにくい】{rank}相場約{int(usd * M.usd_jpy(settings)):,}円／" + note
+                        flagged.append(f"・{title[:30]}（eBay {row[col['eBay出品番号']]}）：状態{rank}・相場約{int(usd * M.usd_jpy(settings)):,}円")
+                except Exception as e:
+                    print("状態の相場でエラー:", type(e).__name__, str(e)[:80])
+            if ans.get("ok") is False:
+                note = f"【確認して】{ans.get('reason', '')}／" + note
+                flagged.append(f"・{title[:30]}（eBay {row[col['eBay出品番号']]}）：{ans.get('reason', '')}")
+            cells += [(i, rc, rank), (i, nc, note[:80])]
+            if uc and raw:
+                cells.append((i, uc, raw))
+            # eBayの出品の状態の説明を書き換える（新品は説明を付けられないので触らない）
+            if rank in RANK_EN and "新品" not in detail.get("condition", ""):
+                try:
+                    token = token or M.get_access_token()
+                    text = condition_text_en(rank, str(ans.get("note_en") or ""))
+                    M.trading_call("ReviseFixedPriceItem", f"<Item><ItemID>{row[col['eBay出品番号']]}</ItemID>"
+                                   f"<ConditionDescription>{_xml(text)}</ConditionDescription></Item>", token)
+                    revised += 1
+                except Exception as e:
+                    print("eBayの状態の説明の書き換えでエラー:", type(e).__name__, str(e)[:100])
+            if len(cells) >= 60:
+                tabs.set("無在庫商品リスト", cells)
+                cells = []
+    finally:
+        if browser:
+            browser.close()
+        if pw:
+            pw.stop()
+        save_mkt()
     if cells:
         tabs.set("無在庫商品リスト", cells)
+    print(f"出品中の状態の確認：{done}件（eBayの状態の説明を書き換え{revised}件）")
     if flagged:
-        M.alert("【確認して】出品中の商品で状態が気になるもの", "\n".join(flagged) +
-                "\n\n出品の終了・値下げはしていません。必要ならご自身で判断してください。")
+        M.alert("【確認して】出品中の商品で状態が気になるもの", "\n".join(flagged[:40]) +
+                "\n\n出品の終了・値下げはしていません（無在庫商品リストのV列に印を付けました）。")
+
+
+def _xml(t):
+    return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 _ranks = [None]
