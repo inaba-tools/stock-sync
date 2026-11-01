@@ -159,8 +159,9 @@ class Calc:
         self.ship = float(settings.get("ship_jpy") or sget(smap, "送料（円）"))
         self.fee = float(settings.get("fee_pct") or sget(smap, "eBay手数料"))
         self.other = float(settings.get("other_pct") or sget(smap, "その他の手数料"))
-        # 最低利益は設定シートB14（最低の利益額）。2026/11/01 ヤフオク用の欄（H6）も B14 を参照する式にした
-        self.min_profit = float(settings.get("min_profit") or sget(smap, "最低の利益額") or sget(smap, "ヤフオクの最低利益", 2000))
+        # 最低利益：ヤフオク（手元在庫になる仕入れ）は設定シートの「ヤフオクの最低利益」（H6）を使う。空なら B14（最低の利益額）
+        # 2026/11/01 本人と相談：在庫を抱えるリスクがあるので、無在庫（B14）と分けて決められるようにした
+        self.min_profit = float(sget(smap, "ヤフオクの最低利益", 0) or settings.get("min_profit") or sget(smap, "最低の利益額") or 2000)
         self.parts_default = sget(smap, "ジャンクの部品代の目安", 3000)
         self.adj = float(settings.get("market_adj") or 80) / 100
         self.rate = 1 - (self.fee + self.other + DUTY) / 100
@@ -1014,15 +1015,15 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
     vals = tabs.get(TAB, fresh=True)
     load_judged()
     cells, n = [], 0
+    ai_stop = False   # 2026/11/01 AIの回数が無くなっても、AIで見済みの行の利益チェック（AIを使わない）は最後まで続ける
     for i, row in enumerate(vals[1:], start=2):
-        if n >= limit or not gem.available(2):
-            break
+        can_ai = not ai_stop and n < limit and gem.available(2)
         row = list(row) + [""] * (len(COL) - len(row))
         st, aid, use = str(row[COL["状態"] - 1]).strip(), str(row[COL["ID"] - 1]).strip(), str(row[COL["用途"] - 1]).strip()
         if st not in ACTIVE or not aid or aid.startswith("http"):
             continue
         if use != "在庫":   # ジャンク：キーが無くて「AI未判定」のままの行を、出品ごとの上限で判定し直す
-            if str(row[COL["参考入札額"] - 1]).strip() != "AI未判定":
+            if str(row[COL["参考入札額"] - 1]).strip() != "AI未判定" or not can_ai:
                 continue
             try:
                 d = y_item(aid)
@@ -1033,7 +1034,8 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             cap, memo, judged = junk_cap(M, tabs, gem, calc, settings, dict(d, auction=True),
                                          str(row[COL["機種"] - 1]), str(row[COL["色"] - 1]), use)
             if not judged:
-                break
+                ai_stop = True
+                continue
             n += 1
             if pace:
                 time.sleep(pace)
@@ -1043,12 +1045,16 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             else:
                 cells += [(i, COL["参考入札額"], cap), (i, COL["メモ"], memo)]
             continue
-        if ("stock:" + aid) in _judged:   # AIで見たことがある行：今の値段で状態の相場の利益が残るかだけ見る
-            sale = num(row[COL["eBay相場"] - 1])
-            price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
-            if sale and price and calc.profit(sale, price) < calc.min_profit:
-                cells += [(i, COL["状態"], "見送り"),
-                          (i, COL["メモ"], f"今の値段だと利益{int(calc.min_profit):,}円が残らない")]
+        # 2026/11/01 今のeBay相場（状態の相場）で利益が残らない行は、AIで見たかどうかに関係なく毎回「見送り」にする
+        sale = num(row[COL["eBay相場"] - 1])
+        price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
+        if sale and price and calc.profit(sale, price) < calc.min_profit:
+            cells += [(i, COL["状態"], "見送り"),
+                      (i, COL["メモ"], f"今の値段だと利益{int(calc.min_profit):,}円が残らない")]
+            continue
+        if ("stock:" + aid) in _judged or str(row[COL["状態説明"] - 1]).startswith("AI："):   # AIで見済み
+            continue
+        if not can_ai:
             continue
         try:
             d = y_item(aid)
@@ -1060,7 +1066,8 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
         ans = gem.ask(2, LISTING_PROMPT.format(model=model, title=d["title"], cond=d.get("cond_name", ""),
                                                desc=(d.get("description") or "")[:1500]), d["images"][:10])
         if ans is None:
-            break
+            ai_stop = True
+            continue
         n += 1
         if pace:
             time.sleep(pace)
