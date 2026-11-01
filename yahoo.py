@@ -317,7 +317,10 @@ def sold_for(tabs, model, color):
             if n < SOLD_MIN:
                 return {"件数": n}
             try:
-                return {"安い": float(r[3]), "ふつう": float(r[4]), "高い": float(r[5]), "件数": n}
+                v = [num(r[3]), num(r[4]), num(r[5])]   # 円の列は式（ドル×今のレート）
+                if None in v:
+                    return None
+                return {"安い": v[0], "ふつう": v[1], "高い": v[2], "件数": n}
             except (TypeError, ValueError):
                 return None
     return None
@@ -365,8 +368,8 @@ def _sale_est(M, tabs, model, color, rank, settings):
     try:
         for row in tabs.get(RANKMKT)[1:]:
             if len(row) >= 7 and str(row[0]) == mm and str(row[1]) == (color or "") and str(row[2]) == rank \
-                    and int(float(row[6] or 0)) >= 3:
-                return float(row[4]), f"状態別相場{rank}（{row[6]}件）"
+                    and int(float(row[6] or 0)) >= 3 and num(row[4]):
+                return num(row[4]), f"状態別相場{rank}（{row[6]}件）"   # 円の列は式（ドル×今のレート）
     except Exception:
         pass
     # ③ 日本から出品中×補正（ランクごとの区別はまだ無いので、Sは高め・Aは真ん中・B/Cは安めの値段を使う）
@@ -1169,7 +1172,7 @@ def weekly_rank_market(M, data):
         graded = json.load(open(cache_f, encoding="utf-8"))
     except (OSError, ValueError):
         graded = {}
-    out = [["機種", "色", "状態ランク", "安い", "ふつう", "高い", "件数", "最終更新", "根拠"]]
+    out = [list(RANKMKT_HEAD)]
     for model, color in models[:40]:
         mk = ebay_cond_market(M, model, color, settings)
         if not mk:
@@ -1201,7 +1204,28 @@ def weekly_rank_market(M, data):
     except OSError:
         pass
     out += [list(r) for r in vals[1:] if len(r) > 2 and str(r[2]) == SOLD_RANK]   # 月1回の「売れた値段」の行は残す
-    M.sheet("tab_replace", name=RANKMKT, values=out)
+    M.sheet("tab_replace", name=RANKMKT, values=live_yen_rows(out, M.usd_jpy(settings)))
+
+
+# 2026/11/02 本人の希望：為替で変わる値段は、ドルを記録して円は「ドル×今のレート」の式にする（売上・台帳などの記録は変えない）
+# 状態別相場：J〜L列に安い/ふつう/高い（$）、D〜F列は =ドル×設定!E9（GOOGLEFINANCEの今のレート。B9に手入力があればそちら）
+RANKMKT_HEAD = ["機種", "色", "状態ランク", "安い", "ふつう", "高い", "件数", "最終更新", "根拠", "安い($)", "ふつう($)", "高い($)"]
+FX_CELL = "'設定'!$E$9"
+
+
+def live_yen_rows(rows, fx):
+    out = [list(RANKMKT_HEAD)]
+    for i, row in enumerate(rows[1:], start=2):
+        row = list(row) + [""] * (12 - len(row))
+        usd = row[9:12]
+        if all(str(x).strip() == "" for x in usd):   # 円しか無い行（今回作った行）はドルに直す
+            usd = [round(num(row[c]) / fx, 2) if num(row[c]) else "" for c in (3, 4, 5)]
+        row[9:12] = usd
+        if any(str(x).strip() != "" for x in usd):
+            for c, col in ((3, "J"), (4, "K"), (5, "L")):
+                row[c] = f'=IF({col}{i}="","",ROUND({col}{i}*{FX_CELL}))'
+        out.append(row[:12])
+    return out
 
 
 # ---------------------------------------------------------------- ジャンク組み合わせ（2026/11/01 作り直し）
