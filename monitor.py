@@ -3454,7 +3454,7 @@ def discover():
                         or it["price"] < 500:   # 500円未満は読み取りミスか付属品（2026/10/28）
                     continue
                 seen.add(u)
-                if any(w in it["title"] for w in title_exclude(exclude, q)) or reserved_reason(it["title"]):
+                if any(w in it["title"] for w in title_exclude(exclude, kw)) or reserved_reason(it["title"]):
                     continue
                 q = kw if gi and (gi.get("exact") or (gi.get("alias") and gi.get("kind") and match_game(it["title"], kw))) \
                     else guess_query(it["title"])   # 機種別カテゴリならその機種。呼び名で分かる機種（2026/10/28追加分）もその機種
@@ -3490,7 +3490,7 @@ def discover():
                 if u in known or u in seen or not it["price"] or it["price"] > max_cost(settings):
                     continue
                 seen.add(u)
-                if any(w in it["title"] for w in title_exclude(exclude, q)) or reserved_reason(it["title"]):
+                if any(w in it["title"] for w in title_exclude(exclude, kw)) or reserved_reason(it["title"]):
                     continue
                 if seller_id(it.get("seller")) in excluded:   # 除外者リストの出品者
                     continue
