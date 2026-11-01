@@ -981,7 +981,36 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             break
         row = list(row) + [""] * (len(COL) - len(row))
         st, aid, use = str(row[COL["状態"] - 1]).strip(), str(row[COL["ID"] - 1]).strip(), str(row[COL["用途"] - 1]).strip()
-        if st not in ACTIVE or use != "在庫" or not aid or aid.startswith("http") or ("stock:" + aid) in _judged:
+        if st not in ACTIVE or not aid or aid.startswith("http"):
+            continue
+        if use != "在庫":   # ジャンク：キーが無くて「AI未判定」のままの行を、出品ごとの上限で判定し直す
+            if str(row[COL["参考入札額"] - 1]).strip() != "AI未判定":
+                continue
+            try:
+                d = y_item(aid)
+            except Exception:
+                continue
+            if not d or d.get("closed"):
+                continue
+            cap, memo, judged = junk_cap(M, tabs, gem, calc, settings, dict(d, auction=True),
+                                         str(row[COL["機種"] - 1]), str(row[COL["色"] - 1]), use)
+            if not judged:
+                break
+            n += 1
+            if pace:
+                time.sleep(pace)
+            price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
+            if cap is None or price > cap:
+                cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], f"AI：{memo}")]
+            else:
+                cells += [(i, COL["参考入札額"], cap), (i, COL["メモ"], memo)]
+            continue
+        if ("stock:" + aid) in _judged:   # AIで見たことがある行：今の値段で状態の相場の利益が残るかだけ見る
+            sale = num(row[COL["eBay相場"] - 1])
+            price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
+            if sale and price and calc.profit(sale, price) < calc.min_profit:
+                cells += [(i, COL["状態"], "見送り"),
+                          (i, COL["メモ"], f"状態の相場{int(sale):,}円では今の値段で利益{int(calc.min_profit):,}円が残らない")]
             continue
         try:
             d = y_item(aid)
@@ -1011,6 +1040,10 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             continue
         cells += [(i, COL["eBay相場"], round(sale)), (i, COL["商品の状態"], f"{rank}（AI）：{note}"[:40]),
                   (i, COL["メモ"], f"AI{rank}相場{int(sale):,}円（{why}）")]
+        price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
+        if price and calc.profit(sale, price) < calc.min_profit:   # 状態の相場だと今の値段でも利益が足りない → 見送り
+            cells += [(i, COL["状態"], "見送り"),
+                      (i, COL["メモ"], f"AI{rank}相場{int(sale):,}円では今の値段で利益{int(calc.min_profit):,}円が残らない（{why}）")]
     save_judged()
     if cells:
         tabs.set(TAB, cells)
