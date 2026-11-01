@@ -934,10 +934,10 @@ def run(M, data, mode="discover", flea=None):
             if st in ("入札中", "上回られた"):
                 ended_bid.append((i, aid, row, price, mymax))
             else:
-                upd.append((i, 1, "終了"))
+                upd.append((i, COL["状態"], "終了"))
         else:
             if mymax and price > mymax and st != "上回られた":
-                upd.append((i, 1, "上回られた"))
+                upd.append((i, COL["状態"], "上回られた"))
                 if cap and cap > price:
                     adv = f"参考入札額まであと{int(cap - price):,}円上げられます（参考入札額 {int(cap):,}円）"
                 else:
@@ -964,14 +964,14 @@ def run(M, data, mode="discover", flea=None):
         hits = [m for m in (res.get("messages") or []) if "落札" in (m.get("subject") or "")
                 and not re.search(r"できません|されません|残念|キャンセル|削除", m.get("subject") or "")]
         if hits:
-            cells.append((i, 1, "落札"))
+            cells.append((i, COL["状態"], "落札"))
             won.append((i, aid, row, price, hits[0]))
         elif mymax and price > mymax:
-            cells.append((i, 1, "負け"))
+            cells.append((i, COL["状態"], "負け"))
         else:
             end = to_dt(row[COL["終了日時"] - 1])
             if end and (now_dt - end).total_seconds() > 24 * 3600:
-                cells.append((i, 1, "終了"))
+                cells.append((i, COL["状態"], "終了"))
                 cells.append((i, COL["メモ"], (str(row[COL["メモ"] - 1]) + " 落札メールが見つからず").strip()))
 
     if cells:
@@ -1194,6 +1194,14 @@ def tidy(tabs):
         d = to_dt(e)
         r[COL["終了日時"] - 1] = d.astimezone(JST).strftime("%Y/%m/%d %H:%M") if d else ("即決" if str(e).startswith("即決") else e)
         changed = changed or (str(e).startswith("即決") and e != "即決")
+    # 2026/11/1 本人の希望：終了したらすぐ履歴へ。検討中のまま終了日時を過ぎた行（終了日時の欄が「終了」の行も）は「終了」にして移す
+    #            入札中・上回られたは落札メールの確認があるので run() に任せる
+    now_dt = datetime.now(JST)
+    for r in rows:
+        e = r[COL["終了日時"] - 1]
+        d = to_dt(e)
+        if str(r[COL["状態"] - 1]).strip() == "検討中" and (str(e).strip() == "終了" or (d and d <= now_dt)):
+            r[COL["状態"] - 1] = "終了"
     # 落札・購入済み：手元在庫シートに無ければ記録してから外す（シートで手で「購入済み」にした分も）
     try:
         dev_txt = " ".join(str(c) for r in tabs.get(DEVICES, fresh=True)[1:] for c in r[:4])
