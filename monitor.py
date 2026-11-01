@@ -422,7 +422,8 @@ INFO_JS = """() => {
     const rv = sa ? (sa.getAttribute('aria-label') || '').match(/([\\d,]+)\\s*件のレビュー/) : null;   // 2026/11/01 出品者の評価の数
     const sd = main.match(/発送までの日数\\s*([^\\n]+)/);   // 2026/11/01 「1~2日で発送」など
     return { title, price: m ? parseInt(m[1].replace(/,/g, ''), 10) : null, seller: sm ? sm[1] : '',
-             reviews: rv ? parseInt(rv[1].replace(/,/g, ''), 10) : null, ship_days: sd ? sd[1].trim() : '' };
+             reviews: rv ? parseInt(rv[1].replace(/,/g, ''), 10) : null, ship_days: sd ? sd[1].trim() : '',
+             ship_dbg: sd ? '' : ((document.body.innerText.match(/.{0,12}発送.{0,20}/g) || []).slice(0, 5).join(' | ')) };
 }"""
 
 # ---------- 仕入れ候補の利益計算 ----------
@@ -1476,6 +1477,8 @@ def _main():
             if info:   # 発送までの日数が読めた件数（確認用）
                 SHIP_SEEN["all"] += 1
                 SHIP_SEEN["read"] += 1 if (info.get("ship_days") or "").strip() else 0
+                if info.get("ship_dbg") and SHIP_SEEN["all"] - SHIP_SEEN["read"] <= 3:
+                    print("発送までの日数が読めない例:", info["ship_dbg"][:200])
             if not acc and slow_ship((info or {}).get("ship_days")):
                 acc, acc_why = True, "発送までの日数が4〜7日の出品"   # 2026/11/01 本人の希望：eBayの発送期限に間に合わないおそれ（出品中・候補とも）
             if not acc and reserved_reason(title_now):
