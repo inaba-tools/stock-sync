@@ -2963,7 +2963,9 @@ def create_listing(r, info, detail, settings, token):
             if inc:
                 bullets = bullets + [f"Included: {', '.join(inc)} (only the items shown in the photos)"]
             if bullets:
-                block = "<h3>Item details</h3><ul>" + "".join(f"<li>{escape(b)}</li>" for b in bullets) + "</ul>"
+                block = ("<h3>Item details</h3><p><i>The details below were filled in automatically by AI from the photos and "
+                         "the original Japanese description. Please check the photos as well.</i></p><ul>"
+                         + "".join(f"<li>{escape(b)}</li>" for b in bullets) + "</ul>")
                 desc_html = re.sub(r"<h2>.*?</h2>", f"<h2>{escape(title_en)}</h2>", desc_html, count=1)
                 desc_html = desc_html.replace("<h3>Notes from the original Japanese description", block + "<h3>Notes from the original Japanese description", 1) \
                     if "<h3>Notes from the original Japanese description" in desc_html else desc_html.replace("<p>Ships from Japan.", block + "<p>Ships from Japan.", 1)
@@ -3469,6 +3471,11 @@ def discover():
             k = model_key(x.get("query"))
             per_model[k] = per_model.get(k, 0) + 1
     found.sort(key=lambda x: (SOLD90.get(x["query"], 0), x["profit"]), reverse=True)
+    try:   # 2026/11/01 キーワードの除外のあと、商品名をAI（別の無料枠のモデル）でまとめて確かめる
+        import yahoo
+        found = yahoo.ai_title_filter(sys.modules[__name__], found)
+    except Exception as e:
+        print("商品名のAI確認でエラー（キーワードの除外だけで続行）:", type(e).__name__, str(e)[:100])
     added = []
     for x in found:
         if len(added) >= max_add:
@@ -3967,6 +3974,9 @@ if __name__ == "__main__":
                 a = ebay_active_items(tk).get(iid, {})
                 print(iid, a, trading_call("ReviseFixedPriceItem",
                       f"<Item><ItemID>{iid}</ItemID><StartPrice>{a['price']:.2f}</StartPrice></Item>", tk))
+        elif len(sys.argv) > 1 and sys.argv[1] == "buyermsg":   # 買い手の質問が来た・「送る」にチェックしたとき（管理表から呼ばれる）
+            import yahoo
+            yahoo.buyer_messages(sys.modules[__name__])
         elif len(sys.argv) > 1 and sys.argv[1] == "endflag":   # 気になる点（AI）に印が付いた出品中の商品を終了する（2026/11/01）
             import yahoo
             vals = yahoo.Tabs(sys.modules[__name__]).get("無在庫商品リスト")

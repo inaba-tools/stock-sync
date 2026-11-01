@@ -1780,4 +1780,68 @@ def buyer_messages(M, gem=None):
         tabs.set(BUYER, cells)
     if rows:
         tabs.append(BUYER, rows)
+    # ③ 返信が済んだ行（ここから送った・eBayで直接返信した）は消す（2026/11/01 本人の希望）
+    try:
+        answered = set()
+        _, _, ar = M.trading_call_root(
+            "GetMemberMessages",
+            "<MailMessageType>AskSellerQuestion</MailMessageType><MessageStatus>Answered</MessageStatus>"
+            f"<StartCreationTime>{(now - timedelta(days=7)).astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</StartCreationTime>"
+            f"<EndCreationTime>{now.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%S.000Z')}</EndCreationTime>", token)
+        for ex in ar.findall(".//e:MemberMessageExchange", ns):
+            answered.add(ex.findtext("e:Question/e:MessageID", default="", namespaces=ns))
+        cur = tabs.get(BUYER, fresh=True)
+        body = [list(r) + [""] * (len(BUYER_HEAD) - len(r)) for r in cur[1:] if any(str(c).strip() for c in r)]
+        left = [r for r in body if str(r[9]).strip() != "送信済み" and str(r[10]).strip() not in answered]
+        if len(left) < len(body):
+            out = []
+            for i, r in enumerate(left, start=2):
+                out += [(i, c, (str(v).upper() == "TRUE" if c == 9 else v)) for c, v in enumerate(r[:len(BUYER_HEAD)], start=1)]
+            for i in range(len(left) + 2, len(body) + 2):
+                out += [(i, c, (False if c == 9 else "")) for c in range(1, len(BUYER_HEAD) + 1)]
+            tabs.set(BUYER, out)
+            print(f"買い手メッセージ：返信済みの{len(body) - len(left)}件を消しました")
+    except Exception as e:
+        print("返信済みの行を消す処理でエラー:", type(e).__name__, str(e)[:80])
     print(f"買い手メッセージ：新しい質問{len(rows)}件／送信{sum(1 for c in cells if c[2] == '送信済み')}件")
+
+
+
+# ---------------------------------------------------------------- 候補の商品名をAIでまとめて確かめる（2026/11/01）
+TITLE_MODEL = "gemini-3.1-flash-lite"   # 状態の確認（3.5 Flash Lite）とは別の無料枠を使う
+TITLE_PROMPT = """日本のフリマの出品の商品名です。eBayで「{kind}の本体（動くもの）」として転売してよいかを判定してください。
+外すもの：本体以外（ケース・カバー・電池だけ・充電器だけ・説明書・箱だけ・部品・基盤・液晶だけ・きせかえプレート等）、
+ジャンク・故障・訳あり・動作未確認、複数台のまとめ売り、型番が「{q}」と違うもの、予約・専用出品。迷うものは外す。
+JSONだけで答える：{{"ng":[外す番号の配列],"why":{{"番号":"理由（10字以内）"}}}}
+{lines}"""
+
+
+def ai_title_filter(M, found, batch=30):
+    """キーワードの除外を通った候補の商品名を、AIでまとめて（30件ずつ1回）確かめる。キーが無い・枠が無いときはそのまま"""
+    if not found or not os.environ.get("GEMINI_API_KEY", "").strip():
+        return found
+    gem = Gemini(Tabs(M))
+    gem._load()
+    gem.model, gem.cell, gem.used, gem.cap = TITLE_MODEL, None, 0, 450
+    keep, dropped = [], 0
+    by_q = {}
+    for x in found:
+        by_q.setdefault(x["query"], []).append(x)
+    for q, xs in by_q.items():
+        gi = M.game_info(q) or {}
+        kind = {"camera": "デジカメ", "md": "MDプレーヤー", "cassette": "カセットプレーヤー", "cd": "CDプレーヤー",
+                "video": "ビデオカメラ", "watch": "腕時計"}.get(gi.get("kind"), "ゲーム機" if gi else "携帯電話")
+        for i in range(0, len(xs), batch):
+            part = xs[i:i + batch]
+            ans = gem.ask(1, TITLE_PROMPT.format(kind=kind, q=q, lines="\n".join(f"{n}. {x['title'][:80]}" for n, x in enumerate(part))))
+            if ans is None:
+                keep += part
+                continue
+            ng = {int(n) for n in (ans.get("ng") or []) if str(n).isdigit()}
+            for n, x in enumerate(part):
+                if n in ng:
+                    dropped += 1
+                else:
+                    keep.append(x)
+    print(f"商品名のAI確認：{len(found)}件のうち{dropped}件を外しました")
+    return keep

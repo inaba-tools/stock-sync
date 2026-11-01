@@ -1,7 +1,12 @@
 name: 売れた直後の売上反映
 
 on:
-  workflow_dispatch:          # eBayで売れた瞬間に、管理表（Apps Script）から呼ばれる
+  workflow_dispatch:          # eBayで売れた瞬間・買い手から質問が来た／返信の「送る」にチェックしたときに、管理表（Apps Script）から呼ばれる
+    inputs:
+      job:
+        description: "sales（売上の反映）／buyermsg（買い手メッセージ）"
+        required: false
+        default: "sales"
 
 concurrency:
   group: sales
@@ -24,8 +29,8 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: 売上シートに手数料・入金額・注文番号などを書く
-        run: python monitor.py sales
+      - name: 売上シートに手数料・入金額・注文番号などを書く（または買い手メッセージ）
+        run: python monitor.py ${{ inputs.job || 'sales' }}
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
@@ -33,3 +38,4 @@ jobs:
           SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
           SHEET_API_KEY: ${{ secrets.SHEET_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # 無料枠のみ（買い手メッセージの訳と返信案）
