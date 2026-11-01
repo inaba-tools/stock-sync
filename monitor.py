@@ -419,7 +419,9 @@ INFO_JS = """() => {
     const m = pm || head.match(/¥\\s*([\\d,]+)/);
     const sa = document.querySelector('a[href*="/shops/profile/"], a[href*="/user/profile/"]');   // 出品者（ショップ・個人）
     const sm = sa ? (sa.getAttribute('href') || '').match(/(?:shops|user)\\/profile\\/([^\\/?#]+)/) : null;
-    return { title, price: m ? parseInt(m[1].replace(/,/g, ''), 10) : null, seller: sm ? sm[1] : '' };
+    const rv = sa ? (sa.getAttribute('aria-label') || '').match(/([\\d,]+)\\s*件のレビュー/) : null;   // 2026/11/01 出品者の評価の数
+    return { title, price: m ? parseInt(m[1].replace(/,/g, ''), 10) : null, seller: sm ? sm[1] : '',
+             reviews: rv ? parseInt(rv[1].replace(/,/g, ''), 10) : null };
 }"""
 
 # ---------- 仕入れ候補の利益計算 ----------
@@ -1420,6 +1422,8 @@ def _main():
                 acc, acc_why = True, "ラクマからの仕入れはやめたため"   # 出品中・候補ともに止める
             if not acc and seller_id((info or {}).get("seller")) in excluded:
                 acc, acc_why = True, "除外者リストの出品者の商品"   # 出品中・候補ともに止める
+            if not acc and (info or {}).get("reviews") == 0:
+                acc, acc_why = True, "取引実績のない出品者（評価0件）"   # 2026/11/01 本人の希望：全商品で外す（出品中・候補とも）
             if not acc and reserved_reason(title_now):
                 acc_why = reserved_reason(title_now)   # 専用出品は買えないので候補・出品とも止める
                 acc = True
@@ -3156,7 +3160,9 @@ def check_yahoo(url):
         return "unknown", {}, {}
     st = j.get("status")
     status = "on_sale" if st == "OPEN" else "sold" if st in ("SOLD", "CLOSED") else "unknown"
-    info = {"title": j.get("title", ""), "price": j.get("price"), "seller": (j.get("seller") or {}).get("id", "")}
+    _rt = ((j.get("seller") or {}).get("rating") or {}).get("total")
+    info = {"title": j.get("title", ""), "price": j.get("price"), "seller": (j.get("seller") or {}).get("id", ""),
+            "reviews": int(_rt) if isinstance(_rt, (int, float)) else None}   # 2026/11/01 出品者の評価の数（読めなければ None）
     detail = {"images": [i.get("url") for i in j.get("images", []) if i.get("url")][:12],
               "description": j.get("description", ""),
               "condition": (j.get("condition") or {}).get("text", ""),

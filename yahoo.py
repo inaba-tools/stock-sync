@@ -218,6 +218,13 @@ def y_search(keyword, page=1):
     return out
 
 
+def _num_or_none(v):
+    try:
+        return int(str(v).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
 def y_item(aid):
     """出品ページ（終了間際・終了の確認・AIの確認のときだけ開く）"""
     r = requests.get(f"https://auctions.yahoo.co.jp/jp/auction/{aid}", headers=HEADERS, timeout=30)
@@ -266,6 +273,7 @@ def y_item(aid):
         "closed": (it.get("status") not in (None, "open")) or ended,
         "store": bool((it.get("seller") or {}).get("isStore")),
         "seller": (it.get("seller") or {}).get("aucUserId") or "",
+        "rating": _num_or_none(((it.get("seller") or {}).get("rating") or {}).get("summary")),   # 2026/11/01 出品者の評価の数
         "images": [x.get("image") for x in (it.get("img") or []) if isinstance(x, dict) and x.get("image")][:8],
         "description": "\n".join(desc) if isinstance(desc, list) else str(desc),
     }
@@ -1129,6 +1137,9 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             continue
         if not d or d.get("closed") or not d.get("images"):
             continue
+        if d.get("rating") == 0:   # 2026/11/01 本人の希望：取引実績のない出品者からは仕入れない
+            cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], "取引実績のない出品者（評価0件）")]
+            continue
         model, color = str(row[COL["機種"] - 1]), str(row[COL["色"] - 1])
         ans = gem.ask(2, LISTING_PROMPT.format(model=model, title=d["title"], cond=d.get("cond_name", ""),
                                                desc=(d.get("description") or "")[:1500]), d["images"][:10])
@@ -1902,6 +1913,8 @@ def _flea_status(M, page, url):
     else:
         st, info = M.check_mercari(page, url)
         detail = page.evaluate(M.DETAIL_JS) if st == "on_sale" else {}
+    if (info or {}).get("reviews") == 0:   # 2026/11/01 取引実績のない出品者は候補にしない
+        st = "no_record"
     return st, (info or {}).get("price"), (info or {}).get("seller", ""), (detail or {}).get("images", []), \
         (detail or {}).get("description", "")
 
@@ -1936,7 +1949,9 @@ def flea_junk(M, data, page):
         except Exception:
             continue
         if st in ("sold", "deleted"):
-            cells += [(i, 1, "終了"), (i, COL["最終更新"], now_s())]
+            cells += [(i, COL["状態"], "終了"), (i, COL["最終更新"], now_s())]
+        elif st == "no_record":   # 2026/11/01 取引実績のない出品者
+            cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], "取引実績のない出品者（評価0件）"), (i, COL["最終更新"], now_s())]
         elif st == "on_sale":
             cells.append((i, COL["最終更新"], now_s()))
             if price:
