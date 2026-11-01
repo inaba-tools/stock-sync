@@ -2682,10 +2682,11 @@ def trading_call_root(call_name, body_xml, token):
 MAX_WAIT = 18 * 60          # 在庫の見張りを待つのは合計18分まで（それ以上は待たずに探す）
 DISCOVER_BUDGET = 18 * 60   # 候補さがしで探す時間の上限（秒）。機種が多いので、残りは次の回に回す
 SPLIT_AT = 230   # 見張る件数がこれ以上になったら、見張りを2本に分けるようメールで知らせる
-FREE_LISTINGS = 1000   # 2026/10/21 ベーシックストア契約（それまでは250件）
 DESC_STOP_MAX = 20     # 説明文の理由で一度に止める上限（超えたら判定ミスとみなして止めずに知らせる）
 FREE_MARGIN = 5        # 数え違いに備えて、245件で止める
 PT = ZoneInfo("America/Los_Angeles")   # eBayの月の区切り（米国太平洋時間）
+# 2026/10/21 ベーシックストア契約で月1,000件。2026年12月からは月250件（本人より）。月の区切りは米国太平洋時間
+FREE_LISTINGS = 1000 if datetime.now(PT).strftime("%Y-%m") <= "2026-11" else 250
 
 
 FREE_TODAY = {"new": 0, "days_left": 30}
