@@ -39,8 +39,8 @@ MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多�
 YAHOO_MAIL = False   # 2026/11/01 本人の希望：ヤフオク関係のメール（上回られた・終了30分前・落札）は送らない。シートは今まで通り更新する
 NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
 # 2026/11/1 本人の希望で「終了日時」を一番左（A列）へ。終了・見送り・負けの行は「ヤフオク履歴」シートへ移し、残りは終了が近い順に並べる
-# 2026/11/1 本人の希望で D列（用途）と E列（ジャンル）の間に「仕入先URL」を追加
-COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "仕入先URL", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
+# 2026/11/1 本人の希望で「商品の状態」を「状態ランク」（[A] の形だけ）と「状態説明」の2列に分けた
+COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "ジャンル", "機種", "色", "状態ランク", "状態説明", "現在価格", "送料", "合計",
                                    "入札数", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
                                    "メモ", "最終更新", "ID"], start=1)}
 M_FORMULA = ('=IF({ID}{r}="","",IF({用途}{r}<>"在庫","AI未判定",IF({相場}{r}="","相場不足",FLOOR({相場}{r}*(1-(VALUE(\'設定\'!$B$7)'
@@ -705,7 +705,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
         except ValueError:
             t_cost = 0
         cap = calc.cap(sale, it.get("ship") or 0, t_cost)
-        return cap, (f"部品取り→{target[0]}（{target[1]} {target[2]}）を直す／{t_rank}相場{int(sale):,}円（{why}）"
+        return cap, (f"部品取り→{target[0]}（{target[1]} {target[2]}）を直す／[{t_rank}]相場{int(sale):,}円（{why}）"
                      f"−相手の仕入{int(t_cost):,}円／上限{cap:,}円"), True
     if any(not any(f in b for f in ok_fix) for b in broken if b):
         return None, "直す範囲外の故障：" + "・".join(broken)[:30], True
@@ -716,7 +716,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
         return None, "相場不足", True
     cap = calc.cap(sale, it.get("ship") or 0, pc)
     memo = (f"{note_ext}{'・'.join(broken) or '故障'}→部品{int(pc):,}円{('（' + pnote + '）') if pnote else ''}／"
-            f"外装{rank}→{rank}相場{int(sale):,}円（{why}）／上限{cap:,}円")
+            f"外装[{rank}]→相場{int(sale):,}円（{why}）／上限{cap:,}円")
     return cap, memo, True
 
 
@@ -858,7 +858,7 @@ def run(M, data, mode="discover", flea=None):
         price = info.get("price") or num(row[COL["現在価格"] - 1]) or 0
         mymax = num(row[COL["自分の最高入札額"] - 1])
         cap = num(row[COL["参考入札額"] - 1])
-        title = f"{row[COL['機種'] - 1]} {row[COL['色'] - 1]} {row[COL['商品の状態'] - 1]}"[:40]
+        title = f"{row[COL['機種'] - 1]} {row[COL['色'] - 1]} {row[COL['状態ランク'] - 1]}"[:40]
         link = f"https://auctions.yahoo.co.jp/jp/auction/{aid}"
         if info.get("closed"):
             if st in ("入札中", "上回られた"):
@@ -917,8 +917,8 @@ def run(M, data, mode="discover", flea=None):
         for k, (c, aid) in enumerate(new_rows):
             r = start + k
             link = link_formula(r, c.get("src") or "ヤフオク")
-            rows.append([c["終了日時"], c["状態"], link, c["用途"], src_url(aid),
-                         c["ジャンル"], c["機種"], c["色"], c["商品の状態"], c["現在価格"], c["送料"],
+            rows.append([c["終了日時"], c["状態"], link, c["用途"],
+                         c["ジャンル"], c["機種"], c["色"], c["状態ランク"], c["状態説明"], c["現在価格"], c["送料"],
                          total_formula(r), c["入札数"],
                          c["上限"] if c.get("上限") is not None else _f(M_FORMULA, r), "", c.get("相場", ""),
                          _f(P_FORMULA, r), _f(Q_FORMULA, r), c["メモ"], now_s(), aid])
@@ -947,7 +947,7 @@ def run(M, data, mode="discover", flea=None):
             if c.get("src"):   # フリマ（即決・早い者勝ち）
                 flines.append(f"・[{c['src']}] {c['機種']} {c['色']}（{c['用途']}）{c['現在価格']:,}円 → {capt}\n  {c['メモ'][:70]}\n  {aid}")
             else:
-                lines.append(f"・{c['機種']} {c['色']} {c['商品の状態']}（{c['用途']}）今 {c['現在価格']:,}円＋送料{c['送料'] if c['送料'] != '' else '不明'}"
+                lines.append(f"・{c['機種']} {c['色']} {c['状態ランク']}（{c['用途']}）今 {c['現在価格']:,}円＋送料{c['送料'] if c['送料'] != '' else '不明'}"
                              f" → {capt}\n  {c['メモ'][:60]}\n  https://auctions.yahoo.co.jp/jp/auction/{aid}")
         body = []
         if flines:
@@ -1001,7 +1001,6 @@ def _row_formulas(row, r):
     row = list(row)
     label = str(row[COL["リンク"] - 1]).strip()
     row[COL["リンク"] - 1] = link_formula(r, label)
-    row[COL["仕入先URL"] - 1] = src_url(row[COL["ID"] - 1])
     row[COL["合計"] - 1] = total_formula(r)
     m = row[COL["参考入札額"] - 1]
     if str(row[COL["用途"] - 1]).strip() == "在庫" or num(m) is None:
@@ -1072,20 +1071,20 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
         _judged["stock:" + aid] = [rank, note, datetime.now(JST).strftime("%Y-%m-%d")]
         if ans.get("ok") is False or rank == "ジャンク" or \
                 re.search(r"本体ではなく|本体ではない|のみの(商品|出品)|パーツのみ|型番違い|ポスター|箱のみ|説明書のみ", note):
-            cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], f"AI：{ans.get('reason') or note}（{rank}）")]
+            cells += [(i, COL["状態"], "見送り"), (i, COL["メモ"], f"AI：{ans.get('reason') or note}[{rank}]")]
             continue
         if rank not in ("S", "A", "B", "C"):
             continue
         sale, why = sale_for(M, tabs, model, color, rank, settings)
         if not sale:
-            cells += [(i, COL["eBay相場"], ""), (i, COL["メモ"], f"AI{rank}：相場不足（{why}）／{note}")]
+            cells += [(i, COL["eBay相場"], ""), (i, COL["メモ"], f"[{rank}]相場不足（{why}）")]
             continue
-        cells += [(i, COL["eBay相場"], round(sale)), (i, COL["商品の状態"], f"{rank}（AI）：{note}"[:40]),
-                  (i, COL["メモ"], f"AI{rank}相場{int(sale):,}円（{why}）")]
+        cells += [(i, COL["eBay相場"], round(sale)), (i, COL["状態ランク"], f"[{rank}]"), (i, COL["状態説明"], ("AI：" + note)[:40]),
+                  (i, COL["メモ"], f"[{rank}]相場{int(sale):,}円（{why}）")]
         price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
         if price and calc.profit(sale, price) < calc.min_profit:   # 状態の相場だと今の値段でも利益が足りない → 見送り
             cells += [(i, COL["状態"], "見送り"),
-                      (i, COL["メモ"], f"AI{rank}相場{int(sale):,}円では今の値段で利益{int(calc.min_profit):,}円が残らない（{why}）")]
+                      (i, COL["メモ"], f"[{rank}]相場{int(sale):,}円では今の値段で利益{int(calc.min_profit):,}円が残らない（{why}）")]
     save_judged()
     if cells:
         tabs.set(TAB, cells)
@@ -1206,9 +1205,9 @@ def consider(M, tabs, gem, calc, settings, it, kw, genre):
         p_now = calc.profit(sale, price + ship_v)
         if p_now < calc.min_profit:
             return None
-        base.update({"用途": "在庫", "商品の状態": f"{rank}：{COND_NAME.get(it['cond'], '')}" + ("・即決" if it["fixed"] else ""),
+        base.update({"用途": "在庫", "状態ランク": f"[{rank}]", "状態説明": f"出品者の申告：{COND_NAME.get(it['cond'], '')}" + ("・即決" if it["fixed"] else ""),
                      "相場": round(sale), "上限": None,
-                     "メモ": f"{rank}相場{int(sale):,}円（{why}）" + ("／送料不明→1,000円で計算" if ship is None else "")})
+                     "メモ": f"[{rank}]相場{int(sale):,}円（{why}）" + ("／送料不明→1,000円で計算" if ship is None else "")})
         return base
     # ---- ジャンク：NGの記載は外す（ピンクの902KC/903KCだけ「充電できない」はOK）
     if NG_ALWAYS.search(t):
@@ -1230,7 +1229,7 @@ def consider(M, tabs, gem, calc, settings, it, kw, genre):
         return None   # AIで見てNG・相場不足・直す範囲外
     if judged and price > cap:
         return None
-    base.update({"用途": use, "商品の状態": "ジャンク：" + (it["title"][:30]), "相場": round(sale) if not judged else "",
+    base.update({"用途": use, "状態ランク": "ジャンク", "状態説明": it["title"][:40], "相場": round(sale) if not judged else "",
                  "上限": cap if judged else "AI未判定",
                  "メモ": (memo if judged else f"{memo}／目安の上限{rough:,}円（外装C・部品代は仮）")
                  + ("／送料不明→1,000円で計算" if ship is None else "")})
@@ -1246,7 +1245,7 @@ def record_win(M, tabs, row, aid, price, mail):
         today = datetime.now(JST).strftime("%Y/%m/%d")
         src = ("メルカリ" if "mercari" in aid else "Yahoo!フリマ") if str(aid).startswith("http") else "ヤフオク"
         tabs.append("古物台帳", [["=ROW()-5", today, src, aid, "携帯電話" if row[COL["ジャンル"] - 1] == "ガラケー" else "ゲーム機",
-                                f"{model} {color} {row[COL['商品の状態'] - 1]}"[:80], 1, int(price), f"{src}出品者",
+                                f"{model} {color} {row[COL['状態ランク'] - 1]} {row[COL['状態説明'] - 1]}"[:80], 1, int(price), f"{src}出品者",
                                 "特例" if price < 10000 else "経過措置", "", "", "✓ 落札メール" if mail else "シートで購入済み", f"送料{int(ship)}円・自動記録"]])
         dev = tabs.get(DEVICES, fresh=True)
         no = next_device_no(dev)
@@ -1938,7 +1937,7 @@ def flea_junk(M, data, page):
             if judged and (cap is None or price > cap):
                 continue
             rows.append(({"状態": "検討中", "src": it["src"], "用途": use, "ジャンル": genre, "機種": model, "色": color,
-                          "商品の状態": "ジャンク：" + t[:30], "現在価格": price, "送料": 0, "入札数": "",
+                          "状態ランク": "ジャンク", "状態説明": t[:40], "現在価格": price, "送料": 0, "入札数": "",
                           "終了日時": "即決", "上限": cap if judged else "AI未判定", "相場": "",
                           "メモ": (memo if judged else f"{memo}／目安の上限{rough:,}円（外装C・部品代は仮）"),
                           "seller": it.get("seller", "")}, u))
