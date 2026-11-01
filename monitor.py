@@ -1596,7 +1596,7 @@ def _main():
                             gate = None
                             try:   # 2026/11/01 出品の直前にAI（Gemini無料枠）で写真と説明文を確認。キーが無ければ今まで通り
                                 import yahoo
-                                gate = yahoo.listing_gate(sys.modules[__name__], r, info, detail)
+                                gate = yahoo.listing_gate(sys.modules[__name__], r, info, detail, settings)
                             except Exception as e:
                                 print("AIの確認でエラー（確認なしで続行はせず、次の回に）:", type(e).__name__)
                                 gate = ("WAIT", "AIの確認でエラー")
@@ -3410,14 +3410,14 @@ def discover():
                 flea = yahoo.flea_junk(sys.modules[__name__], data, page)
             except Exception as e:
                 print("フリマのジャンク探しでエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
+        if nego:   # 2026/11/01 値引き候補シートに追加。AIで状態を見るため、ブラウザを閉じる前に（メルカリの出品ページを開く）
+            try:
+                import yahoo
+                yahoo.nego_add(sys.modules[__name__], nego, page, settings)
+            except Exception as e:
+                print("値引き候補の追加でエラー:", type(e).__name__, str(e)[:150])
         browser.close()
     save_market_cache()
-    if nego:   # 2026/11/01 値引き候補シートに追加（メールは1本目のヤフオクの回でまとめて送る）
-        try:
-            import yahoo
-            yahoo.nego_add(sys.modules[__name__], nego)
-        except Exception as e:
-            print("値引き候補の追加でエラー:", type(e).__name__, str(e)[:150])
 
     # よく売れる機種を優先し、同じ機種は（出品中＋候補で）3件までにする
     per_model = {}

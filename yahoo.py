@@ -31,7 +31,8 @@ PARTS = "部品表"
 REPAIR = "修理部品表"   # 2026/11/01 機種×不具合×部品・値段・購入リンク（部品代はここの値段を使う）
 NEGO = "値引き候補"
 NEGO_HEAD = ["機種", "商品名", "URL", "仕入れ先", "今の値段", "お願いする値段", "値引き後の利益", "eBayの90日販売台数",
-             "コピー用の文面", "状況", "追加日", "最終確認", "メール"]
+             "コピー用の文面", "状況", "追加日", "最終確認", "メール", "状態（AI）"]
+NEGO_AI_MAX = 15   # 1回の候補さがしでAIに見せる値引き候補の数（無料枠を使いすぎないように）
 NEGO_MSG = "はじめまして。購入を検討しております。大変恐縮ですが、{ask:,}円でお譲りいただくことは可能でしょうか？ご検討いただけますと幸いです。"
 JUDGED_FILE = os.path.join(".cache", "ai_judged.json")   # AIで見た出品（1件1回だけ判定する）
 RANKMKT = "状態別相場"
@@ -1065,8 +1066,9 @@ def label_text(no, model, color, state):
 _gate_gem = [None]
 
 
-def listing_gate(M, r, info, detail):
-    """None：出品してよい（キーが無いときは今まで通り）／("SKIP", 理由)／("WAIT", 理由)"""
+def listing_gate(M, r, info, detail, settings=None):
+    """None：出品してよい（キーが無いときは今まで通り）／("SKIP", 理由)／("WAIT", 理由)
+    2026/11/01 AIが見た状態ランク（S/A/B/C）の相場でも、利益2,000円の値段で売れるかを確かめる（売れない値段なら出品しない）"""
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return None
     if _gate_gem[0] is None:
@@ -1082,6 +1084,22 @@ def listing_gate(M, r, info, detail):
         return ("WAIT", "AIの確認ができなかったため、次の回に出品します") if gem.blocked else None
     if ans.get("ok") is False:
         return ("SKIP", f"【AI確認】出品しません：{str(ans.get('reason', ''))[:40]}（{ans.get('rank', '')}）")
+    rank = str(ans.get("rank") or "").strip().upper()
+    if rank == "ジャンク":
+        return ("SKIP", "【AI確認】出品しません：写真・説明文からジャンク扱い")
+    if settings and rank in ("S", "A", "B", "C"):
+        try:
+            model = r.get("query") or ""
+            title = (info or {}).get("title", r.get("title", ""))
+            cost = float((info or {}).get("price") or 0)
+            sale, why = sale_for(M, gem.tabs, model, color_of(title), rank, settings)
+            if sale and cost:
+                floor = M.floor_price_usd(cost, model, settings)
+                if sale / M.usd_jpy(settings) < floor:
+                    return ("SKIP", f"【AI確認】状態{rank}の相場は約{int(sale):,}円（{why}）で、"
+                                    f"利益2,000円の値段（約{int(floor * M.usd_jpy(settings)):,}円）では売れにくいので出品しません")
+        except Exception as e:
+            print("状態別の相場の確認でエラー（今まで通り出品）:", type(e).__name__, str(e)[:80])
     return None
 
 
@@ -1369,21 +1387,70 @@ def flea_junk(M, data, page):
 
 
 # ---------------------------------------------------------------- 値引き候補（2026/11/01）
-def nego_add(M, nego):
-    """discover で見つけた値引き候補をシートに追加（同じURLは追加しない）"""
+def nego_add(M, nego, page=None, settings=None):
+    """discover で見つけた値引き候補をシートに追加（同じURLは追加しない）。
+    2026/11/01 追加する前にAI（Gemini無料枠）で写真と説明文を見て、状態ランクの相場でお願いする値段と利益を計算し直す。
+    ダメな出品・状態の相場では利益が残らない出品は入れない。AIが使えない日（上限）は入れずに次の回へ"""
     tabs = Tabs(M)
     vals = tabs.get(NEGO)
     have = {str(r[2]).strip() for r in vals[1:] if len(r) > 2}
+    settings = settings or {}
     today, rows = now_s(), []
+    gem = Gemini(tabs) if os.environ.get("GEMINI_API_KEY", "").strip() else None
+    calc = Calc(settings, setting_map(tabs.get("設定"))) if gem else None
+    load_judged()
+    asked = 0
     for x in nego:
         if x["url"] in have:
             continue
+        ai = ""
+        if gem:
+            key = "nego:" + x["url"]
+            got = _judged.get(key)
+            if got is None:
+                if asked >= NEGO_AI_MAX or not gem.available(2):
+                    continue
+                try:
+                    st, _, _, images, desc = _flea_status(M, page, x["url"]) if (page or "paypayfleamarket" in x["url"]) \
+                        else ("unknown", None, None, [], "")
+                except Exception:
+                    continue
+                if st != "on_sale":
+                    continue
+                asked += 1
+                ans = gem.ask(2, LISTING_PROMPT.format(model=x["model"], title=x["title"], cond="", desc=(desc or "")[:1500]),
+                              (images or [])[:4])
+                if ans is None:
+                    continue
+                got = [ans.get("ok") is not False, str(ans.get("rank") or "").strip().upper(),
+                       str(ans.get("reason") or ans.get("note") or "")[:40], datetime.now(JST).strftime("%Y-%m-%d")]
+                _judged[key] = got
+            ok, rank, note = got[0], got[1], got[2]
+            if not ok or rank not in ("S", "A", "B", "C"):
+                continue
+            sale, why = sale_for(M, tabs, x["model"], color_of(x["title"]), rank, settings)
+            if not sale:
+                continue
+            total = sale / M.usd_jpy(settings)
+            need = calc.min_profit
+            price = int(x["price"])
+            p_now = M.profit_from_total(total, price, x["model"], settings)
+            if p_now >= need:      # 値引きなしで利益が出る → 値引き候補ではない（普通の候補の方で扱う）
+                continue
+            ask = int((price - (need - p_now)) // 10 * 10)
+            while ask > 0 and M.profit_from_total(total, ask, x["model"], settings) < need:
+                ask -= 10
+            if ask <= 0 or (price - ask) / price > M.NEGO_MAX_PCT:
+                continue
+            x = dict(x, ask=ask, profit=int(M.profit_from_total(total, ask, x["model"], settings)))
+            ai = f"{rank}：{note}（{why}）" if note else f"{rank}（{why}）"
         have.add(x["url"])
         rows.append([x["model"], x["title"][:60], x["url"], x["src"], x["price"], x["ask"], x["profit"], x["sold90"],
-                     NEGO_MSG.format(ask=x["ask"]), "未", today, today, ""])
+                     NEGO_MSG.format(ask=x["ask"]), "未", today, today, "", ai])
+    save_judged()
     if rows:
         tabs.append(NEGO, rows)
-        print(f"値引き候補を{len(rows)}件追加")
+        print(f"値引き候補を{len(rows)}件追加（AIに見せたのは{asked}件）")
 
 
 def nego_unsent(tabs):
