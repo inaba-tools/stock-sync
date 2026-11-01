@@ -1473,6 +1473,9 @@ def _main():
                 acc, acc_why = True, "除外者リストの出品者の商品"   # 出品中・候補ともに止める
             if not acc and (info or {}).get("reviews") == 0:
                 acc, acc_why = True, "取引実績のない出品者（評価0件）"   # 2026/11/01 本人の希望：全商品で外す（出品中・候補とも）
+            if info:   # 発送までの日数が読めた件数（確認用）
+                SHIP_SEEN["all"] += 1
+                SHIP_SEEN["read"] += 1 if (info.get("ship_days") or "").strip() else 0
             if not acc and slow_ship((info or {}).get("ship_days")):
                 acc, acc_why = True, "発送までの日数が4〜7日の出品"   # 2026/11/01 本人の希望：eBayの発送期限に間に合わないおそれ（出品中・候補とも）
             if not acc and reserved_reason(title_now):
@@ -1886,6 +1889,7 @@ def _main():
             sync_sales(token, settings)
     except Exception as e:
         print("売上シートの更新に失敗:", str(e)[:100])
+    print(f"発送までの日数を読めた商品：{SHIP_SEEN['read']}件／{SHIP_SEEN['all']}件")
     msg = f"{now()} 正常終了：{summary}／eBayで売れた {sold_n}件／eBay停止 {stopped}件／利益計算 {researched}件／出品 {listed}件"
     print(msg)
     sheet("log", message=msg)
@@ -3274,6 +3278,9 @@ def yahoo_search(keyword, settings=None, max_price=None, max_items=500):
 # 設定シートB17で変えられる。説明文にもよく出る言葉（ケース・保護など）は入れない（まともな出品まで消えるため）
 SEARCH_EXCLUDE_DEFAULT = ["ジャンク", "部品取り", "パーツ取り", "動作未確認", "通電のみ", "通電確認のみ",
                           "ガラクタ", "訳あり", "訳アリ", "不動品", "電源入らない"]
+
+
+SHIP_SEEN = {"all": 0, "read": 0}
 
 
 def slow_ship(text):
