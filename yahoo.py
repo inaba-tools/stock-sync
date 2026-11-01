@@ -1096,6 +1096,12 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
             continue
         # 2026/11/01 今のeBay相場（状態の相場）で利益が残らない行は、AIで見たかどうかに関係なく毎回「見送り」にする
         sale = num(row[COL["eBay相場"] - 1])
+        rk = str(row[COL["状態ランク"] - 1]).strip().strip("[]").upper()
+        if sale and rk in ("S", "A", "B", "C"):   # 相場は毎回出し直す（売れた値段の更新などを、前からある行にも反映する）
+            s2, _ = sale_for(M, tabs, str(row[COL["機種"] - 1]), str(row[COL["色"] - 1]), rk, settings)
+            if s2 and abs(s2 - sale) >= 1:
+                sale = s2
+                cells.append((i, COL["eBay相場"], round(s2)))
         price = (num(row[COL["現在価格"] - 1]) or 0) + (num(row[COL["送料"] - 1]) or 0)
         if sale and price and calc.profit(sale, price) < calc.min_profit:
             cells += [(i, COL["状態"], "見送り"),
