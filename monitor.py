@@ -1280,14 +1280,13 @@ def main():
         _main()
     finally:
         save_imghash()
-    # 2026/11/01 ヤフオクの終了2時間前の行だけ更新（上回られた・終了30分前のメール）＋出品中の商品のAI確認（余った回数で）
+    # 出品中の商品のAI確認（余った回数で）。2026/11/01 ヤフオクの入札の仕組みはやめて削除した
     try:
         import yahoo
-        yahoo.run(sys.modules[__name__], {"settings": {}}, "soon")
         yahoo.check_active_listings(sys.modules[__name__])
         yahoo.buyer_messages(sys.modules[__name__])   # 2026/11/01 買い手の質問の日本語訳と返信案（チェックで送信）
     except Exception as e:
-        print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
+        print("出品中の確認でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
     try:   # 2026/11/01 30日たってもウォッチ0の出品は、自動更新（無料出品枠を1件使う）の前に終わらせる
         end_stale()
     except Exception as e:
@@ -3691,13 +3690,12 @@ def discover():
                                   "profit": p, "margin": rate, "memo": f"自動発見（Yahoo!フリマ・状態{rk}の相場）",
                                   "result": f"自動発見 {now()}"})
             time.sleep(random.uniform(4, 7))   # メルカリに止められないよう、検索ごとに少し待つ
-        flea = None
-        if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 フリマの修理用ジャンクさがし（1本目だけ・ブラウザを使い回す）
+        if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 ジャンク組み合わせ（1本目だけ・ブラウザを使い回す）
             try:
                 import yahoo
-                flea = yahoo.flea_junk(sys.modules[__name__], data, page)
+                yahoo.junk_combo(sys.modules[__name__], data, page)
             except Exception as e:
-                print("フリマのジャンク探しでエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
+                print("ジャンク組み合わせでエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
         browser.close()
     save_market_cache()
 
@@ -3726,13 +3724,12 @@ def discover():
         sheet("append", rows=added)
         best = added[0]
         notify(f"【仕入れ候補】{len(added)}件を追加しました。最高：{best['title'][:30]} 想定利益 {best['profit']:,}円（{best['margin']}%）")
-    if SHARD == 0 and not FULL_SCAN:   # 2026/11/01 ヤフオク仕入れ（1本目だけ。失敗しても候補さがしは止めない）
+    if SHARD == 0 and not FULL_SCAN:   # 週1の状態別相場（1本目だけ。失敗しても候補さがしは止めない）
         try:
             import yahoo
-            yahoo.run(sys.modules[__name__], data, "discover", flea=flea)
             yahoo.weekly_rank_market(sys.modules[__name__], data)
         except Exception as e:
-            print("ヤフオクの処理でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
+            print("状態別相場の更新でエラー（次の回にやり直し）:", type(e).__name__, str(e)[:150])
     msg = (f"{now()} {'【全部見る回】' if FULL_SCAN else ''}候補さがし：メルカリ{pages_seen[0]}ページ・{len(seen)}件を確認、{checked}件を計算、条件に合う{len(found)}件のうち{len(added)}件を追加"
            f"（{(time.time() - t0) / 60:.0f}分・相場は{_market_stats['hit']}件を使い回し、{_market_stats['miss']}件を新しく取得）")
     print(msg)
@@ -4263,11 +4260,7 @@ if __name__ == "__main__":
             st = data.get("settings", {})
             tabs = yahoo.Tabs(sys.modules[__name__])
             gem = yahoo.Gemini(tabs)
-            calc = yahoo.Calc(st, yahoo.setting_map(tabs.get("設定")))
-            n1 = yahoo.ai_recheck_bids(sys.modules[__name__], tabs, gem, calc, st, limit=150, pace=4.5)
-            print("ヤフオク入札をAIで確認:", n1, "件")
             yahoo.check_active_listings(sys.modules[__name__], per_run=200, settings=st)
-            yahoo.tidy(tabs)
             yahoo.save_mkt()
         elif len(sys.argv) > 1 and sys.argv[1] == "createpolicy":
             create_region_policy()
