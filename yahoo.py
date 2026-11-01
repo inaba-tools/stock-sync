@@ -1211,7 +1211,14 @@ COMBO_HEAD = ["提案", "組", "役割", "見込み利益", "機種", "色", "�
               "メモ", "リンク", "出品元", "見つけた日時", "最終確認", "ID"]
 CI = {k: i for i, k in enumerate(COMBO_HEAD)}
 # 機種 → 商品名の書き方（型番か愛称のどちらかが入っていればその機種）。2機種目はここに足す
-JUNK_MODELS = {"903KC": ["903KC", "DIGNOケータイ3", "ディグノケータイ3"]}
+JUNK_MODELS = {"903KC": ["903KC", "DIGNOケータイ3", "ディグノケータイ3"], "902KC": ["902KC"],   # 2026/11/01 本人OK：3機種追加
+               "A202KC": ["A202KC"], "KY-42C": ["KY-42C"]}
+# 部品が共通で、組み合わせてよい機種のまとまり（修理部品表のメモ：902KC/903KC共通）。ここに無い機種は同じ機種同士だけ
+PART_GROUPS = [{"902KC", "903KC"}]
+
+
+def _same_parts(a, b):
+    return a == b or any(a in g and b in g for g in PART_GROUPS)
 JUNK_MAX = 2000            # 1台の上限（送料込み）。設定シートに「ジャンクの上限」があればそちら
 JUNK_PROFIT_MIN = 2000     # 提案する見込み利益の下限（ジャンクの利益ライン）
 PART_NAMES = ["外装（表）", "外装（裏）", "メイン液晶", "サブ液晶", "基板", "キー", "ヒンジ", "充電口", "バッテリー", "カメラ"]
@@ -1270,11 +1277,12 @@ def _flea_status(M, page, url):
 
 def _model_of(title):
     t = re.sub(r"\s", "", unicodedata.normalize("NFKC", title or "")).upper()
+    t_alnum = re.sub(r"[-‐－―]", "", t)   # KY-42C と KY42C を同じに扱う
     for m, names in JUNK_MODELS.items():
         for n in names:
             n2 = re.sub(r"\s", "", unicodedata.normalize("NFKC", n)).upper()
-            if re.fullmatch(r"[0-9A-Z]+", n2):
-                if re.search(r"(?<![0-9])" + re.escape(n2) + r"(?![A-Z0-9])", t):
+            if re.fullmatch(r"[-0-9A-Z]+", n2):
+                if re.search(r"(?<![0-9])" + re.escape(n2.replace("-", "")) + r"(?![A-Z0-9])", t_alnum):
                     return m
             elif n2 in t:
                 return m
@@ -1325,7 +1333,7 @@ def _plans(M, tabs, calc, settings, units):
                                        if b["bad"] else "悪い部品なし（動作の確認を）") + f"／{why}"})
         # 2台：悪い部品は相手の良い部品か、買える部品で埋める
         for d in units:
-            if d is b or d["機種"] != b["機種"]:
+            if d is b or not _same_parts(d["機種"], b["機種"]):
                 continue
             take, bought, ok = [], 0, True
             for p in b["bad"]:
