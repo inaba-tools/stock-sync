@@ -39,15 +39,50 @@ MAX_NEW = 20   # 1回に追加する新しい候補の上限（メールが多�
 YAHOO_MAIL = False   # 2026/11/01 本人の希望：ヤフオク関係のメール（上回られた・終了30分前・落札）は送らない。シートは今まで通り更新する
 NEW_MAIL = False   # 2026/11/1 本人の希望：新しい候補（ヤフオク・フリマのジャンク）のメールは送らない。シートに入るだけ。上回られた・30分前・落札のメールは送る
 # 2026/11/1 本人の希望で「終了日時」を一番左（A列）へ。終了・見送り・負けの行は「ヤフオク履歴」シートへ移し、残りは終了が近い順に並べる
-COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
+# 2026/11/1 本人の希望で D列（用途）と E列（ジャンル）の間に「仕入先URL」を追加
+COL = {k: i for i, k in enumerate(["終了日時", "状態", "リンク", "用途", "仕入先URL", "ジャンル", "機種", "色", "商品の状態", "現在価格", "送料", "合計",
                                    "入札数", "参考入札額", "自分の最高入札額", "eBay相場", "利益今", "利益上限",
                                    "メモ", "最終更新", "ID"], start=1)}
-M_FORMULA = ('=IF(T{r}="","",IF(D{r}<>"在庫","AI未判定",IF(O{r}="","相場不足",FLOOR(O{r}*(1-(VALUE(\'設定\'!$B$7)'
-             '+VALUE(\'設定\'!$B$8)+12.5)/100)-VALUE(\'設定\'!$B$6)-N(YAHOO_MIN_PROFIT)-N(J{r}),10))))')
-P_FORMULA = ('=IF(OR(O{r}="",K{r}=""),"",ROUND(O{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
-             '-VALUE(\'設定\'!$B$6)-K{r}))')
-Q_FORMULA = ('=IF(OR(O{r}="",N{r}=""),"",ROUND(O{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
-             '-VALUE(\'設定\'!$B$6)-N{r}-N(J{r})))')
+M_FORMULA = ('=IF({ID}{r}="","",IF({用途}{r}<>"在庫","AI未判定",IF({相場}{r}="","相場不足",FLOOR({相場}{r}*(1-(VALUE(\'設定\'!$B$7)'
+             '+VALUE(\'設定\'!$B$8)+12.5)/100)-VALUE(\'設定\'!$B$6)-N(YAHOO_MIN_PROFIT)-N({送料}{r}),10))))')
+P_FORMULA = ('=IF(OR({相場}{r}="",{合計}{r}=""),"",ROUND({相場}{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
+             '-VALUE(\'設定\'!$B$6)-{合計}{r}))')
+Q_FORMULA = ('=IF(OR({相場}{r}="",{最高}{r}=""),"",ROUND({相場}{r}*(1-(VALUE(\'設定\'!$B$7)+VALUE(\'設定\'!$B$8)+12.5)/100)'
+             '-VALUE(\'設定\'!$B$6)-{最高}{r}-N({送料}{r})))')
+
+
+
+def _letter(n):
+    t = ""
+    while n:
+        n, m = divmod(n - 1, 26)
+        t = chr(65 + m) + t
+    return t
+
+
+_L = {"ID": _letter(COL["ID"]), "用途": _letter(COL["用途"]), "相場": _letter(COL["eBay相場"]), "送料": _letter(COL["送料"]),
+      "合計": _letter(COL["合計"]), "最高": _letter(COL["自分の最高入札額"]), "価格": _letter(COL["現在価格"])}
+
+
+def _f(tpl, r):
+    """列の文字は COL から決める（列を足しても数式がずれないように）"""
+    return tpl.replace("{{", "\x00").replace("}}", "\x01").format(r=r, **_L).replace("\x00", "{").replace("\x01", "}")
+
+
+def src_url(aid):
+    aid = str(aid).strip()
+    return aid if aid.startswith("http") else (f"https://auctions.yahoo.co.jp/jp/auction/{aid}" if aid else "")
+
+
+def total_formula(r):
+    return f'=IF({_L["価格"]}{r}="","",{_L["価格"]}{r}+N({_L["送料"]}{r}))'
+
+
+def link_formula(r, label):
+    if label in ("メルカリ", "Yahoo!フリマ"):
+        return f'=HYPERLINK({_L["ID"]}{r},"{label}")'
+    return f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&{_L["ID"]}{r},"ヤフオク")'
+
 
 # ヤフオクの「商品の状態」→ 状態ランク（AIを使わずに決める）
 COND_RANK = {"NEW": "S", "USED10": "S", "USED20": "A", "USED40": "B", "USED60": "C", "USED80": "C"}
@@ -609,7 +644,7 @@ def save_judged():
 
 
 def junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
-    """ジャンク1件の上限（M列）とメモ。戻り値 (上限 or None, メモ, 判定済みか)。AIの判定は出品ごとに1回だけ（結果を覚えておく）"""
+    """ジャンク1件の上限（参考入札額の列）とメモ。戻り値 (上限 or None, メモ, 判定済みか)。AIの判定は出品ごとに1回だけ（結果を覚えておく）"""
     if not _judged:
         load_judged()
     if it["id"] in _judged:
@@ -881,13 +916,12 @@ def run(M, data, mode="discover", flea=None):
         rows = []
         for k, (c, aid) in enumerate(new_rows):
             r = start + k
-            link = (f'=HYPERLINK(T{r},"{c["src"]}")' if c.get("src") else
-                    f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&T{r},"ヤフオク")')
-            rows.append([c["終了日時"], c["状態"], link, c["用途"],
+            link = link_formula(r, c.get("src") or "ヤフオク")
+            rows.append([c["終了日時"], c["状態"], link, c["用途"], src_url(aid),
                          c["ジャンル"], c["機種"], c["色"], c["商品の状態"], c["現在価格"], c["送料"],
-                         f'=IF(I{r}="","",I{r}+N(J{r}))', c["入札数"],
-                         c["上限"] if c.get("上限") is not None else M_FORMULA.format(r=r), "", c.get("相場", ""),
-                         P_FORMULA.format(r=r), Q_FORMULA.format(r=r), c["メモ"], now_s(), aid])
+                         total_formula(r), c["入札数"],
+                         c["上限"] if c.get("上限") is not None else _f(M_FORMULA, r), "", c.get("相場", ""),
+                         _f(P_FORMULA, r), _f(Q_FORMULA, r), c["メモ"], now_s(), aid])
         tabs.append(TAB, rows)
         # 同じ出品者の候補が複数 → 同梱で送料が安くなるかも
         by_seller = {}
@@ -966,19 +1000,19 @@ def _row_formulas(row, r):
     """行 r に置くときの数式を入れ直す（リンク・合計・参考入札額・見込み利益）"""
     row = list(row)
     label = str(row[COL["リンク"] - 1]).strip()
-    row[COL["リンク"] - 1] = (f'=HYPERLINK(T{r},"{label}")' if label in ("メルカリ", "Yahoo!フリマ") else
-                             f'=HYPERLINK("https://auctions.yahoo.co.jp/jp/auction/"&T{r},"ヤフオク")')
-    row[COL["合計"] - 1] = f'=IF(I{r}="","",I{r}+N(J{r}))'
+    row[COL["リンク"] - 1] = link_formula(r, label)
+    row[COL["仕入先URL"] - 1] = src_url(row[COL["ID"] - 1])
+    row[COL["合計"] - 1] = total_formula(r)
     m = row[COL["参考入札額"] - 1]
     if str(row[COL["用途"] - 1]).strip() == "在庫" or num(m) is None:
-        row[COL["参考入札額"] - 1] = M_FORMULA.format(r=r)
-    row[COL["利益今"] - 1] = P_FORMULA.format(r=r)
-    row[COL["利益上限"] - 1] = Q_FORMULA.format(r=r)
+        row[COL["参考入札額"] - 1] = _f(M_FORMULA, r)
+    row[COL["利益今"] - 1] = _f(P_FORMULA, r)
+    row[COL["利益上限"] - 1] = _f(Q_FORMULA, r)
     return row
 
 
 def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
-    """ヤフオク入札の「在庫」の行（入札・検討中）をAIで1回だけ見て、状態ランクでeBay相場（O列）を出し直す。
+    """ヤフオク入札の「在庫」の行（入札・検討中）をAIで1回だけ見て、状態ランクでeBay相場の列を出し直す。
     ダメな出品は「見送り」。2026/11/01 本人の希望：相場は状態を加味したものにする"""
     vals = tabs.get(TAB, fresh=True)
     load_judged()
