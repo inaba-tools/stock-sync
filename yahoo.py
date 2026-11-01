@@ -766,6 +766,9 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
 
 
 # ---------------------------------------------------------------- メイン
+YAHOO_GAMES = {"PCH-1000", "PCH-2000"}   # ヤフオク・修理用ジャンクで扱うゲーム機（無在庫は設定B12のゲーム機を全部扱う）
+
+
 def keywords_for(M, settings):
     kws = [k.strip() for k in re.split(r"[,、\n]", str(settings.get("keywords") or "")) if k.strip()]
     out = []
@@ -774,7 +777,7 @@ def keywords_for(M, settings):
         if gi is None:
             if re.search(r"\d{3}(KC|SH)$|^(KY|SH|P|F|N|SO|CA)-?\d|^KYF|^A\d{3}", k, re.I):
                 out.append((k, "ガラケー", k))
-        elif not gi.get("kind"):
+        elif not gi.get("kind") and k.upper() in YAHOO_GAMES:   # 2026/11/01 ヤフオク（先に買う）のゲーム機はPS Vitaだけ
             out.append((k, "ゲーム機", gi.get("yahoo_q", k)))
     return out
 
