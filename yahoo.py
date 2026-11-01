@@ -27,7 +27,8 @@ TAB = "ヤフオク入札"
 ARCHIVE = "ヤフオク履歴"   # 終了・見送り・負けの行の置き場（同じ出品をもう一度候補にしないために残す）
 DONE = ("終了", "見送り", "負け")
 HAND = ("落札", "購入済み")   # 手元在庫シートに記録したら、ヤフオク入札からは外す（2026/11/01 本人の希望）
-DEVICES = "手元在庫"   # 2026/11/01 名前を変更（旧：端末管理）。落札・購入した端末はここで管理する
+DEVICES = "ジャンク品在庫"   # 2026/11/01 名前を変更（旧：手元在庫・端末管理）。落札・購入した端末はここで管理する
+# 2026/11/1 本人の希望：A列に「終了」のチェック（終わった行はグレー＋取り消し線）。ツールはA列を飛ばして読む（dev_rows）
 PARTS = "部品表"
 REPAIR = "修理部品表"   # 2026/11/01 機種×不具合×部品・値段・購入リンク（部品代はここの値段を使う）
 JUDGED_FILE = os.path.join(".cache", "ai_judged.json")   # AIで見た出品（1件1回だけ判定する）
@@ -755,7 +756,7 @@ def _junk_cap(M, tabs, gem, calc, settings, it, model, color, use):
         # 生きている部品で直せる相手の1台（端末管理の「部品待ち」）が直ったときの利益から上限を出す
         target = None
         try:
-            for row in tabs.get(DEVICES)[1:]:
+            for row in dev_rows(tabs.get(DEVICES)):
                 if len(row) >= 9 and "待ち" in str(row[7]) or (len(row) >= 9 and "交換中" in str(row[7])):
                     need = str(row[8])
                     if market_model(str(row[1])) == market_model(model) and any(need and need in a for a in ans.get("alive_parts") or []):
@@ -1240,7 +1241,7 @@ def tidy(tabs):
             r[COL["状態"] - 1] = "終了"
     # 落札・購入済み：手元在庫シートに無ければ記録してから外す（シートで手で「購入済み」にした分も）
     try:
-        dev_txt = " ".join(str(c) for r in tabs.get(DEVICES, fresh=True)[1:] for c in r[:4])
+        dev_txt = " ".join(str(c) for r in dev_rows(tabs.get(DEVICES, fresh=True)) for c in r[:4])
     except Exception:
         dev_txt = None
     for r in rows:
@@ -1383,7 +1384,7 @@ def record_win(M, tabs, row, aid, price, mail):
         dev = tabs.get(DEVICES, fresh=True)
         no = next_device_no(dev)
         state = "部品取り" if use == "部品取り" else ("修理待ち" if "修理" in str(use) else "検品待ち")
-        tabs.append(DEVICES, [[no, model, color, f"{src} {aid}", today, "", int(price + ship), state, "",
+        tabs.append(DEVICES, [[False, no, model, color, f"{src} {aid}", today, "", int(price + ship), state, "",
                                str(row[COL["メモ"] - 1])[:80], label_text(no, model, color, state)]])
         if use == "部品取り":
             tabs.append(PARTS, [[no, model, "（生きている部品は届いたら確認）", "", "在庫", f"{src} {aid}"]])
@@ -1391,9 +1392,14 @@ def record_win(M, tabs, row, aid, price, mail):
         print("落札の記録に失敗:", str(e)[:120])
 
 
+def dev_rows(dev):
+    """ジャンク品在庫の2行目以降を、A列（終了のチェック）を外した形で返す（管理番号が先頭）"""
+    return [list(r[1:]) for r in (dev or [])[1:]]
+
+
 def next_device_no(dev):
     n = 0
-    for row in dev[1:]:
+    for row in dev_rows(dev):
         m = re.match(r"K-(\d+)", str(row[0] if row else ""))
         if m:
             n = max(n, int(m.group(1)))
