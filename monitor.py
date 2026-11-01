@@ -2293,6 +2293,21 @@ THANKS_MSG = ("Hi! Thank you so much for your purchase. Your item is being prepa
               "If you have any questions, feel free to message us anytime!")
 
 
+def condition_note_for(item_id, token):
+    """eBayの出品の状態の説明（AIのランクB/Cで書いた気になる点）から、念押しの1文を作る。無ければ ''"""
+    try:
+        ack, errs, root = trading_call_root(
+            "GetItem", f"<ItemID>{item_id}</ItemID><OutputSelector>ConditionDescription</OutputSelector>", token)
+        cd = root.findtext(".//e:ConditionDescription", default="", namespaces=NS) or ""
+    except Exception:
+        return ""
+    m = re.match(r"Condition rank ([BC]): [^.]*\.\s*(.*?)\s*(?:Seller's note:|Please check all photos|$)", cd, re.S)
+    if not m or not m.group(2).strip():
+        return ""
+    note = m.group(2).strip()
+    return note if note.endswith(".") else note + "."
+
+
 def send_thanks(o, token):
     """仕入れが済んだ注文の購入者に、お礼と発送予定日のメッセージを送る"""
     date = ""
@@ -2300,6 +2315,10 @@ def send_thanks(o, token):
         d = datetime.fromisoformat(o["ship_by"].replace("Z", "+00:00")).astimezone(ZoneInfo("Asia/Tokyo"))
         date = d.strftime("%B ") + str(d.day)
     body = THANKS_MSG.format(date=date or "the handling time shown in the listing")
+    note = condition_note_for(o["item_id"], token)
+    if note:   # 2026/11/01 気になる点がある商品だけ、出品ページに書いた状態を念押しする（本人の希望）
+        body = body.replace(" If you have any questions,",
+                            f" As mentioned in the listing, please note: {note} If you have any questions,")
     ack, errs, root = trading_call_root(
         "AddMemberMessageAAQToPartner",
         f"<ItemID>{o['item_id']}</ItemID><MemberMessage><Subject>Thank you for your purchase!</Subject>"
