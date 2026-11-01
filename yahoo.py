@@ -1215,9 +1215,39 @@ def ai_recheck_bids(M, tabs, gem, calc, settings, limit=10, pace=0.0):
     return n
 
 
+def mark_listed_junk(tabs):
+    """2026/11/1 本人の希望：ジャンク品在庫はジャンクだけ。eBayに出品した端末（直して出したもの）は自動で「終了」にチェック。
+    目印：無在庫商品リストの手元在庫の行にその管理番号がある、または状態の欄に「eBay出品中」とある"""
+    dev = tabs.get(DEVICES, fresh=True)
+    if len(dev) < 2:
+        return
+    try:
+        listed_txt = " ".join(" ".join(str(c) for c in r) for r in tabs.get("無在庫商品リスト")[1:]
+                              if any(str(c).strip().startswith("手元在庫") for c in r))
+    except Exception:
+        listed_txt = ""
+    cells = []
+    for i, r in enumerate(dev[1:], start=2):
+        r = list(r) + [""] * 12
+        if str(r[0]).strip().upper() == "TRUE":
+            continue
+        no = str(r[1]).strip()
+        if not re.match(r"K-\d+", no):
+            continue
+        if re.search(rf"{re.escape(no)}(?!\d)", listed_txt) or "eBay出品中" in str(r[8]):
+            cells.append((i, 1, True))
+    if cells:
+        tabs.set(DEVICES, cells)
+        print(f"ジャンク品在庫：eBayに出品済みの{len(cells)}台を終了に")
+
+
 def tidy(tabs):
     """終了・見送り・負け・落札・購入済みの行を「ヤフオク履歴」へ移し、残りを終了が近い順に並べ直す（1時間ごとの回の最後に1回）。
     落札・購入済みは手元在庫シートに記録済みのものだけ移す（無ければ記録してから）"""
+    try:
+        mark_listed_junk(tabs)
+    except Exception as e:
+        print("ジャンク品在庫の終了チェックでエラー:", type(e).__name__, str(e)[:100])
     vals = tabs.get(TAB, fresh=True)
     if len(vals) < 2:
         return
