@@ -188,7 +188,10 @@ def ebay_ad_fees(days=90):
 def listing_views(ids, days=30):
     """出品ごとの閲覧数と表示回数 {出品番号: (閲覧, 表示)}（直近30日）。権限がなければ {}"""
     tok = get_finances_token(ANALYTICS_SCOPE)
-    if not tok or not ids:
+    if not ids:
+        return {}
+    if not tok:
+        print("閲覧数・表示回数の権限がまだありません（売れない原因の種類は判定しません）")
         return {}
     end = datetime.now(ZoneInfo("America/Los_Angeles"))
     rng = f"[{(end - timedelta(days=days)).strftime('%Y%m%d')}..{end.strftime('%Y%m%d')}]"
@@ -210,13 +213,36 @@ def listing_views(ids, days=30):
     return out
 
 
-def unsold_reason(days, views, watch, price, target, model):
-    """売れていない理由の予想（リストのY列）"""
+UNSOLD = {}          # 2026/11/02 {出品番号: (種類, 理由)}。この回で判定した「売れない原因」（管理表の列と自動改善に使う）
+UNSOLD_COL = "売れない原因（自動）"
+UNSOLD_MIN_DAYS = 14  # 原因の種類（見られていない／クリックされない／値段・状態）を決めるのは出品から14日たってから
+
+
+def unsold_kind(days, views, impressions, watch):
+    """売れない原因の種類。表示回数・閲覧数は直近30日。決められないときは ""
+    見られていない：検索にほとんど出ていない → タイトルを見直す
+    クリックされない：検索には出るのに開かれない → 1枚目の写真を見直す
+    値段・状態：開かれるのにウォッチされない → 値段（今のルールでは下げない）・状態の問題"""
+    if days is None or days < UNSOLD_MIN_DAYS or watch or impressions is None:
+        return ""
+    span = min(days, 30)
+    if impressions < 3 * span:          # 1日に3回も検索に出ていない
+        return "見られていない"
+    if views is not None and views < impressions * 0.005:   # 200回出て1回も開かれない程度
+        return "クリックされない"
+    if views is not None and views >= 10:
+        return "値段・状態"
+    return ""
+
+
+def unsold_reason(days, views, watch, price, target, model, impressions=None, iid=None):
+    """売れていない理由の予想（管理表の「売れない原因（自動）」列）"""
     if days is None:
         return ""
     if days < 3:
         return "出品して間もない（様子見）"
-    rs = []
+    kind = unsold_kind(days, views, impressions, watch)
+    rs = [f"【{kind}】表示{impressions}回・閲覧{views}回（直近{min(int(days), 30)}日）"] if kind else []
     try:
         if target and price and float(price) > float(target) * 1.1:
             rs.append(f"相場より高い（出品${float(price):.0f}／売れている相場${float(target):.0f}）")
@@ -231,7 +257,38 @@ def unsold_reason(days, views, watch, price, target, model):
     sold = SOLD90_BY_KEY.get(model_key(model))
     if sold is not None and sold < 10:
         rs.append(f"売れるペースが遅い機種（90日で{sold}台）")
-    return " / ".join(rs[:3]) or "はっきりした原因なし（もう少し様子見）"
+    text = " / ".join(rs[:3]) or "はっきりした原因なし（もう少し様子見）"
+    if iid:
+        UNSOLD[str(iid)] = (kind, text)
+    return text
+
+
+def write_unsold():
+    """この回で判定した「売れない原因」を無在庫商品リストの列に書く（列が無ければ右端に作る）。変わったセルだけ"""
+    if not UNSOLD:
+        return
+    import yahoo as ymod
+    tabs = ymod.Tabs(sys.modules[__name__])
+    vals = tabs.get("無在庫商品リスト", fresh=True)
+    if not vals:
+        return
+    head = [str(h).strip() for h in vals[0]]
+    ci = head.index("eBay出品番号")
+    if UNSOLD_COL in head:
+        cu = head.index(UNSOLD_COL)
+    else:
+        cu = len(head)
+        tabs.set("無在庫商品リスト", [(1, cu + 1, UNSOLD_COL)])
+    cells = []
+    for i, row in enumerate(vals[1:], start=2):
+        iid = str(row[ci]).strip() if len(row) > ci else ""
+        if iid in UNSOLD:
+            now = str(row[cu]) if len(row) > cu else ""
+            if now != UNSOLD[iid][1]:
+                cells.append((i, cu + 1, UNSOLD[iid][1]))
+    if cells:
+        tabs.set("無在庫商品リスト", cells)
+        print(f"売れない原因：{len(cells)}件を書きました")
 
 
 # ---------- ウォッチしている人への値引きオファー ----------
@@ -1291,11 +1348,20 @@ def main():
         end_stale()
     except Exception as e:
         print("売れない出品の終了でエラー:", type(e).__name__, str(e)[:150])
-    try:   # 2026/11/01 14日たってもウォッチ0の出品のタイトルをAIで見直す（1件1回）
+    try:   # 2026/11/02 売れない原因を管理表の列に出す
+        write_unsold()
+    except Exception as e:
+        print("売れない原因の書き込みでエラー:", type(e).__name__, str(e)[:150])
+    try:   # 2026/11/01 14日たってもウォッチ0の出品のタイトルをAIで見直す（1件1回。11/02から「見られていない」を優先）
         import yahoo
         yahoo.retitle_slow(sys.modules[__name__])
     except Exception as e:
         print("タイトル見直しでエラー:", type(e).__name__, str(e)[:150])
+    try:   # 2026/11/02 検索に出るのに開かれない出品は、1枚目の写真をAIで選び直す（1件1回）
+        import yahoo
+        yahoo.rephoto_slow(sys.modules[__name__])
+    except Exception as e:
+        print("写真の入れ替えでエラー:", type(e).__name__, str(e)[:150])
 
 
 STALE_DAYS = 29     # 30日ごとの自動更新の少し前
@@ -1691,8 +1757,10 @@ def _main():
                         if act.get("days") is not None:
                             upd["days_listed"] = int(act["days"])
                             v = views.get(r["ebay_item_id"])
-                            upd["reason"] = unsold_reason(act["days"], v[0] if v else None, act.get("watch"),
-                                                          act.get("price"), target, q)
+                            upd["reason"] = unsold_reason(act["days"], v[0] if v else (0 if views else None),
+                                                          act.get("watch"), act.get("price"), target, q,
+                                                          impressions=v[1] if v else (0 if views else None),
+                                                          iid=r["ebay_item_id"])
                             try:   # 2026/11/01 AIで見た状態ランクも売れない理由に入れる（キーが無ければ何もしない）
                                 import yahoo as ymod
                                 rk = ymod.ai_rank(sys.modules[__name__], r["ebay_item_id"])

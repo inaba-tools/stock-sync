@@ -814,7 +814,9 @@ def retitle_slow(M, per_run=3, days=14):
         return 0
     tabs = Tabs(M)
     gem = Gemini(tabs)
-    if not gem.available(3):
+    gem._load()   # 2026/11/02 状態チェックと取り合わないよう、商品名の確認と同じ別の無料枠（3.1 Flash-Lite）を使う
+    gem.model, gem.cell, gem.used, gem.cap = TITLE_MODEL, None, 0, 450
+    if not gem.available(1):
         return 0
     token = M.get_access_token()
     act = M.ebay_active_items(token)
@@ -823,14 +825,21 @@ def retitle_slow(M, per_run=3, days=14):
     ci, cm, ct, cq = head.index("eBay出品番号"), head.index("メモ"), head.index("商品名"), head.index("検索語")
     cr = head.index("状態ランク（AI）") if "状態ランク（AI）" in head else None
     ns = M.NS
+    unsold = getattr(M, "UNSOLD", {}) or {}
+    order = list(enumerate(vals[1:], start=2))
+    # 「見られていない」と判定された出品を先に。原因が分かっていて「見られていない」以外（写真・値段の問題）はタイトルを変えない
+    order.sort(key=lambda t: 0 if (unsold.get(str(t[1][ci]).strip() if len(t[1]) > ci else "") or ("",))[0] == "見られていない" else 1)
     n, cells = 0, []
-    for i, row in enumerate(vals[1:], start=2):
+    for i, row in order:
         if n >= per_run:
             break
         row = list(row) + [""] * (len(head) - len(row))
         iid = str(row[ci]).strip()
         a = act.get(iid)
         if not a or a.get("watch") or (a.get("days") or 0) < days or RETITLE_MARK in str(row[cm]):
+            continue
+        kind = (unsold.get(iid) or ("",))[0]
+        if kind and kind != "見られていない":
             continue
         _, _, r = M.trading_call_root("GetItem", f"<ItemID>{iid}</ItemID><OutputSelector>Title</OutputSelector>", token)
         old = r.findtext(".//e:Item/e:Title", default="", namespaces=ns) or ""
@@ -845,6 +854,66 @@ def retitle_slow(M, per_run=3, days=14):
             res = M.trading_call("ReviseFixedPriceItem", f"<Item><ItemID>{iid}</ItemID><Title>{_xml(new)}</Title></Item>", token)
             print("タイトル見直し:", iid, old, "→", new, res)
         cells.append((i, cm + 1, (str(row[cm]) + f"／{RETITLE_MARK}({datetime.now(JST).strftime('%m/%d')})").lstrip("／")))
+    if cells:
+        tabs.set("無在庫商品リスト", cells)
+    return n
+
+
+# ---------------------------------------------------------------- 検索に出るのに開かれない出品の1枚目の写真を選び直す（2026/11/02）
+REPHOTO_PROMPT = """eBayに出品している中古の{model}の写真です（{count}枚・1から番号）。検索結果に出る1枚目の写真として、
+海外の買い手が思わずクリックしたくなる1枚を選んでください。条件：本体全体がはっきり写っている、明るくピントが合っている、
+文字入れ・箱だけ・付属品だけ・手や部屋が大きく写ったものではない。1枚目が一番良ければ1。JSONだけで答える：{{"best":番号}}"""
+REPHOTO_MARK = "写真入れ替え済み"
+
+
+def rephoto_slow(M, per_run=2):
+    """「クリックされない」と判定された出品（出品14日以上・ウォッチ0）の1枚目の写真を、AIが選んだ一番良い写真にする（1件1回）"""
+    unsold = getattr(M, "UNSOLD", {}) or {}
+    targets = {iid for iid, (kind, _) in unsold.items() if kind == "クリックされない"}
+    if not targets or not os.environ.get("GEMINI_API_KEY", "").strip():
+        return 0
+    tabs = Tabs(M)
+    gem = Gemini(tabs)
+    gem._load()
+    gem.model, gem.cell, gem.used, gem.cap = TITLE_MODEL, None, 0, 450
+    if not gem.available(1):
+        return 0
+    vals = tabs.get("無在庫商品リスト", fresh=True)
+    head = [str(h).strip() for h in vals[0]]
+    ci, cm, cq = head.index("eBay出品番号"), head.index("メモ"), head.index("検索語")
+    token = M.get_access_token()
+    ns = M.NS
+    n, cells = 0, []
+    for i, row in enumerate(vals[1:], start=2):
+        if n >= per_run:
+            break
+        row = list(row) + [""] * (len(head) - len(row))
+        iid = str(row[ci]).strip()
+        if iid not in targets or REPHOTO_MARK in str(row[cm]):
+            continue
+        _, _, r = M.trading_call_root("GetItem", f"<ItemID>{iid}</ItemID><OutputSelector>PictureDetails</OutputSelector>", token)
+        pics = [p.text for p in r.findall(".//e:Item/e:PictureDetails/e:PictureURL", ns) if p.text]
+        mark = (str(row[cm]) + f"／{REPHOTO_MARK}({datetime.now(JST).strftime('%m/%d')})").lstrip("／")
+        if len(pics) < 2:
+            cells.append((i, cm + 1, mark))   # 写真が1枚だけなら入れ替えようがない
+            continue
+        ans = gem.ask(1, REPHOTO_PROMPT.format(model=str(row[cq]).strip(), count=min(len(pics), 10)), pics[:10])
+        if ans is None:
+            break   # 枠が無い・つながらない → 次の回に
+        n += 1
+        try:
+            best = int(ans.get("best") or 1)
+        except (TypeError, ValueError):
+            best = 1
+        if 2 <= best <= min(len(pics), 10):
+            new = [pics[best - 1]] + [p for k, p in enumerate(pics) if k != best - 1]
+            res = M.trading_call("ReviseFixedPriceItem", f"<Item><ItemID>{iid}</ItemID><PictureDetails>"
+                                 + "".join(f"<PictureURL>{_xml(u)}</PictureURL>" for u in new)
+                                 + "</PictureDetails></Item>", token)
+            print("1枚目の写真を入れ替え:", iid, f"{best}枚目→1枚目", res)
+        else:
+            print("1枚目の写真はそのまま（AIが今の1枚目を選んだ）:", iid)
+        cells.append((i, cm + 1, mark))
     if cells:
         tabs.set("無在庫商品リスト", cells)
     return n
