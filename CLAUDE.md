@@ -47,5 +47,6 @@
 - 途中で止まりそうなら区切りでコミットし、どこまでできたかを設定シートのメモ欄に短く残す
 
 ## 今の状態（変わったら更新する）
+- 2026-11-02：eBayのトークンを取り直した（閲覧数＝sell.analytics.readonly・お金の明細＝sell.finances・sell.marketing を追加。期限は約18か月＝`TOKEN_ISSUED`）。次に取り直すとき：開発者サイトにログイン→`auth.ebay.com/oauth2/authorize`（RuNameは開発者サイトのUser Tokens画面）で同意→戻り先URLのcodeを、新しく作った鍵の公開鍵を`.github/tokenkey.pub`に置いてから「1回だけの作業」に `ebaycode <RuName> <code>` で渡す（5分で切れる。トークンは暗号化してログに出る→手元の秘密鍵で戻す）。Secretsの書き換えはClaudeからできないので、本人がGitHubの画面で貼る
 - 2026-11-01：ヤフオクの仕組みを削除し、フリマのジャンク探しを「ジャンク組み合わせ」に作り直した（値引き交渉の仕組みも11/1にやめて削除）。GeminiのAPIキーは11/1に本人が登録（Secrets `GEMINI_API_KEY`、無料枠のみ）
 - 修理部品表の値段は11/1に調べて入れた（Yahoo!・楽天・AliExpressの目安）。UTL-001（DSi LL）の液晶だけ見つからず空欄

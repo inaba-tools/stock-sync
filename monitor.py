@@ -106,7 +106,7 @@ def get_access_token():
 
 
 # eBayのRefresh Tokenの期限（取り直したら TOKEN_ISSUED を書き換える）
-TOKEN_ISSUED = "2026-10-21"
+TOKEN_ISSUED = "2026-11-02"
 TOKEN_DAYS = 547   # 約18か月
 TOKEN_HOWTO = ("取り直し方：Claudeに「eBayのトークンを取り直したい」と伝えてください。"
                "取り直すまで、在庫チェック・出品・売り切れ時の出品停止がすべて止まります。")
