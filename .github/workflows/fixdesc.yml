@@ -24,22 +24,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: eBayのトークンの受け取り（cmdが ebaycode のときだけ。中身はログに出さず暗号化して出す）
+        if: ${{ startsWith(inputs.cmd, 'ebaycode') }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.error, urllib.parse, urllib.request
+          cmd = json.load(open(os.environ["GITHUB_EVENT_PATH"]))["inputs"]["cmd"].split()
+          runame, code = cmd[1], urllib.parse.unquote(cmd[2])
+          auth = base64.b64encode(f'{os.environ["EBAY_APP_ID"]}:{os.environ["EBAY_CERT_ID"]}'.encode()).decode()
+          req = urllib.request.Request("https://api.ebay.com/identity/v1/oauth2/token",
+              data=urllib.parse.urlencode({"grant_type": "authorization_code", "code": code, "redirect_uri": runame}).encode(),
+              headers={"Authorization": "Basic " + auth, "Content-Type": "application/x-www-form-urlencoded"})
+          try:
+              js = json.load(urllib.request.urlopen(req, timeout=30))
+          except urllib.error.HTTPError as e:
+              print("受け取りに失敗:", e.code, e.read()[:200].decode(errors="ignore"))
+              raise SystemExit(1)
+          open("rt", "w").write(js["refresh_token"])
+          print("受け取りOK（有効期限 約", int(js.get("refresh_token_expires_in", 0)) // 86400, "日）")
+          PY
+          echo "暗号化したトークン："
+          openssl pkeyutl -encrypt -pubin -inkey .github/tokenkey.pub -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in rt | base64 -w0; echo
+          rm -f rt
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+
       - uses: actions/setup-python@v5
+        if: ${{ !startsWith(inputs.cmd, 'ebaycode') }}
         with:
           python-version: "3.12"
           cache: pip
 
       - run: pip install -r requirements.txt
+        if: ${{ !startsWith(inputs.cmd, 'ebaycode') }}
 
       - name: ブラウザのキャッシュ
+        if: ${{ !startsWith(inputs.cmd, 'ebaycode') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('requirements.txt') }}
 
       - run: python -m playwright install --with-deps chromium
+        if: ${{ !startsWith(inputs.cmd, 'ebaycode') }}
 
       - name: 出品中の商品のタイトル・説明をAIで作り直す（2026/11/01）／cmd があればその作業
+        if: ${{ !startsWith(inputs.cmd, 'ebaycode') }}
         run: |
           if [ -n "$CMD" ]; then python monitor.py $CMD; else python monitor.py airewrite "$N"; fi
         env:
