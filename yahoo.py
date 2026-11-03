@@ -1543,6 +1543,7 @@ def junk_combo(M, data, page):
 
     # ---- 新しいジャンクをさがす（機種名・愛称で、2,000円以下。ピンクの902KC・903KCは値段に関係なく探してお知らせ）
     opened, added = 0, 0
+    new_junk = []   # 2026/11/03 本人の希望：新しいジャンクが1台でも見つかったらメール
     try:
         with open(PINK_SEEN_FILE) as f:
             pink_seen = set(json.load(f))
@@ -1609,7 +1610,15 @@ def junk_combo(M, data, page):
                                 int(p2 or it["price"]), rank if rank in "SABC" else "C", "・".join(good), "・".join(bad),
                                 str(ans.get("note") or "")[:40], "", it["src"], now_s(), now_s(), u]))
             added += 1
+            new_junk.append(f"・[{it['src']}] {model} {int(p2 or it['price']):,}円（状態{rank if rank in 'SABC' else 'C'}）"
+                            f" 良い部品：{'・'.join(good) or 'なし'}／悪い部品：{'・'.join(bad) or 'なし'}\n  {t[:40]}\n  {u}")
     save_judged()
+    if new_junk:   # 2026/11/03 本人の希望：新しいジャンクが見つかったら1回にまとめてメール（1出品1回）
+        try:
+            M.alert(f"【ジャンク】新しいジャンクが{len(new_junk)}台見つかりました", "\n".join(new_junk)
+                    + "\n\n高い出品は値下げ交渉してから（買う上限は「ジャンク組み合わせ」シートのメモ）。購入はご自身で（自動では買いません）。")
+        except Exception as e:
+            print("ジャンクのメールでエラー:", type(e).__name__, str(e)[:100])
     if pink_new:   # 2026/11/01 本人の希望：ピンクの902KC・903KCが出たら、ジャンクでも値段に関係なくすぐメール
         M.alert(f"【ピンク】ガラケーのピンクが{len(pink_new)}件出ました", "\n".join(pink_new)
                 + "\n\n購入はご自身で（自動では買いません）。ジャンクは5,000円以下ならジャンク組み合わせシートにも入ります。")
