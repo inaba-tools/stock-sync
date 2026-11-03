@@ -166,6 +166,9 @@ def ebay_ad_fees(days=90):
         for t in js.get("transactions", []):
             ft = str(t.get("feeType", "")).upper()
             if "AD_FEE" not in ft and "PROMOT" not in ft:   # 広告以外（出品手数料など）は経費シートへ
+                memo = str(t.get("transactionMemo") or "")
+                if ft == "OTHER_FEES" and re.fullmatch(r"\s*\d{4}-\d\d-\d\d\s*-\s*\d{4}-\d\d-\d\d\s*", memo):
+                    continue   # 2026/11/03 ストアの月額（期間だけのメモ）は経費シートの「eBayストア代」と二重になるので入れない
                 v = float((t.get("amount") or {}).get("value") or 0)
                 NON_SALE_OTHER.append({"id": t.get("transactionId", ""), "date": (t.get("transactionDate") or "")[:10],
                                        "type": ft or "OTHER", "usd": round(-v if t.get("bookingEntry") == "CREDIT" else v, 2),
