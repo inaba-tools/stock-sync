@@ -47,6 +47,7 @@
 - 途中で止まりそうなら区切りでコミットし、どこまでできたかを設定シートのメモ欄に短く残す
 
 ## 今の状態（変わったら更新する）
+- 2026-11-05：**eBayの合い鍵（Refresh Token）は管理表のApps Scriptに保管**（スクリプトのプロパティ `EBAY_REFRESH_TOKEN`・`EBAY_TOKEN_ISSUED`。App ID・Cert IDも初回にツールが預けた）。ツールは `sheet("ebaytoken")` で毎回読み、使えなければSecretsの合い鍵で続ける。取り直しは、期限のお知らせ・緊急メールに入るリンク（Webアプリの `?ebay=login&k=…`）→eBayで同意→Webアプリの doGet が code を受け取って保管、で終わり（本人だけで2分）。開発者サイトのRuNameの「auth accepted URL」はWebアプリのURLにした。Apps Scriptのデプロイ（新バージョン）とeBay開発者サイトの保存は、Claudeからは押せないので本人が押す。**ユーザー名・パスワード・パスキーを変えると合い鍵が切れる**（11/5 1:08にパスキー削除で切れた）。下の ebaycode の手順は予備
 - 2026-11-05：eBayのユーザー名を変えた（11/4）あとトークンが無効になったので取り直した（期限 約547日）。**ユーザー名を変えるとトークンが切れる**。開発者サイトのUser Tokensページの「Sign in to Production for OAuth」で出るのは2時間の鍵だけでRefresh Tokenは出ないので、必ず下の ebaycode の手順で取る。秘密鍵はその回の作業場所にしか残らないので、毎回作り直して公開鍵を置き換える
 - 2026-11-02：eBayのトークンを取り直した（閲覧数＝sell.analytics.readonly・お金の明細＝sell.finances・sell.marketing を追加。期限は約18か月＝`TOKEN_ISSUED`）。次に取り直すとき：開発者サイトにログイン→`auth.ebay.com/oauth2/authorize`（RuNameは開発者サイトのUser Tokens画面）で同意→戻り先URLのcodeを、新しく作った鍵の公開鍵を`.github/tokenkey.pub`に置いてから「1回だけの作業」に `ebaycode <RuName> <code>` で渡す（5分で切れる。トークンは暗号化してログに出る→手元の秘密鍵で戻す）。Secretsの書き換えはClaudeからできないので、本人がGitHubの画面で貼る
 - 2026-11-01：ヤフオクの仕組みを削除し、フリマのジャンク探しを「ジャンク組み合わせ」に作り直した（値引き交渉の仕組みも11/1にやめて削除）。GeminiのAPIキーは11/1に本人が登録（Secrets `GEMINI_API_KEY`、無料枠のみ）
