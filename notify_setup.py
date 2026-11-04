@@ -31,7 +31,7 @@ def refresh_token():
         r = requests.post(SHEET_API_URL, data=json.dumps({"key": SHEET_API_KEY, "action": "ebaytoken"}),
                           headers={"Content-Type": "text/plain"}, timeout=60)
         t = r.json().get("token")
-        if t:
+        if t and r.json().get("issued"):   # 取得日の記録がある＝新しい仕組みで受け取った合い鍵
             return t
     except Exception:
         pass

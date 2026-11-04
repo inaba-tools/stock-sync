@@ -93,13 +93,7 @@ def sheet(action, **payload):
 
 # ---------- eBay ----------
 def get_access_token():
-    auth = "Basic " + base64.b64encode(f"{APP_ID}:{CERT_ID}".encode()).decode()
-    r = requests.post(
-        TOKEN_URL,
-        headers={"Authorization": auth, "Content-Type": "application/x-www-form-urlencoded"},
-        data={"grant_type": "refresh_token", "refresh_token": refresh_token(), "scope": SCOPES},
-        timeout=30,
-    )
+    r = _token_post(SCOPES)
     if r.status_code != 200:
         raise RuntimeError(f"eBayトークン更新に失敗 ({r.status_code}): {r.text[:300]}")
     return r.json()["access_token"]
@@ -126,8 +120,30 @@ def _token_store():
     return _TOKEN["store"]
 
 
+def _refresh_tokens():
+    """使う順：保管場所の合い鍵 → Secretsの合い鍵（保管場所のが古くて使えないときの予備）"""
+    out = []
+    for t in (_TOKEN.get("good"), _token_store().get("token"), _ENV_REFRESH_TOKEN):
+        if t and t not in out:
+            out.append(t)
+    return out or [""]
+
+
 def refresh_token():
-    return _token_store().get("token") or _ENV_REFRESH_TOKEN
+    return _refresh_tokens()[0]
+
+
+def _token_post(scope):
+    """使える合い鍵でアクセス用の鍵をもらう。だめなら次の合い鍵を試す"""
+    auth = "Basic " + base64.b64encode(f"{APP_ID}:{CERT_ID}".encode()).decode()
+    r = None
+    for t in _refresh_tokens():
+        r = requests.post(TOKEN_URL, headers={"Authorization": auth, "Content-Type": "application/x-www-form-urlencoded"},
+                          data={"grant_type": "refresh_token", "refresh_token": t, "scope": scope}, timeout=30)
+        if r.status_code == 200:
+            _TOKEN["good"] = t
+            return r
+    return r
 
 
 def token_howto():
@@ -140,7 +156,9 @@ def token_howto():
 
 
 def token_days_left():
-    issued = datetime.strptime(_token_store().get("issued") or TOKEN_ISSUED, "%Y-%m-%d").replace(tzinfo=JST)
+    st = _token_store()
+    use_store = st.get("issued") and st.get("token") and _TOKEN.get("good", st.get("token")) == st.get("token")
+    issued = datetime.strptime(st["issued"] if use_store else TOKEN_ISSUED, "%Y-%m-%d").replace(tzinfo=JST)
     return (issued + timedelta(days=TOKEN_DAYS) - datetime.now(JST)).days
 
 
@@ -161,14 +179,8 @@ NON_SALE_OTHER = []   # 広告費以外の手数料（出品手数料など）�
 
 def get_finances_token(scope=FINANCES_SCOPE):
     """追加の権限（お金の明細・閲覧数）のトークン。権限がまだなければ None（ほかの処理は止めない）"""
-    auth = "Basic " + base64.b64encode(f"{APP_ID}:{CERT_ID}".encode()).decode()
     try:
-        r = requests.post(
-            TOKEN_URL,
-            headers={"Authorization": auth, "Content-Type": "application/x-www-form-urlencoded"},
-            data={"grant_type": "refresh_token", "refresh_token": refresh_token(), "scope": scope},
-            timeout=30,
-        )
+        r = _token_post(scope)
         return r.json().get("access_token") if r.status_code == 200 else None
     except Exception:
         return None
