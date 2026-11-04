@@ -18,7 +18,6 @@ import requests
 
 APP_ID = os.environ["EBAY_APP_ID"]
 CERT_ID = os.environ["EBAY_CERT_ID"]
-REFRESH_TOKEN = os.environ["EBAY_REFRESH_TOKEN"]
 SHEET_API_URL = os.environ["SHEET_API_URL"]
 SHEET_API_KEY = os.environ["SHEET_API_KEY"]
 MODE = (sys.argv[1] if len(sys.argv) > 1 else "setup").strip()
@@ -26,11 +25,24 @@ NS = {"e": "urn:ebay:apis:eBLBaseComponents"}
 EVENTS = ["FixedPriceTransaction", "AuctionCheckoutComplete"]   # 即決で売れた・オークションの支払い完了
 
 
+def refresh_token():
+    """トークンは管理表のApps Scriptに保管（無ければSecrets）"""
+    try:
+        r = requests.post(SHEET_API_URL, data=json.dumps({"key": SHEET_API_KEY, "action": "ebaytoken"}),
+                          headers={"Content-Type": "text/plain"}, timeout=60)
+        t = r.json().get("token")
+        if t:
+            return t
+    except Exception:
+        pass
+    return os.environ.get("EBAY_REFRESH_TOKEN", "")
+
+
 def token():
     auth = "Basic " + base64.b64encode(f"{APP_ID}:{CERT_ID}".encode()).decode()
     r = requests.post("https://api.ebay.com/identity/v1/oauth2/token",
                       headers={"Authorization": auth, "Content-Type": "application/x-www-form-urlencoded"},
-                      data={"grant_type": "refresh_token", "refresh_token": REFRESH_TOKEN,
+                      data={"grant_type": "refresh_token", "refresh_token": refresh_token(),
                             "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory"},
                       timeout=30)
     r.raise_for_status()

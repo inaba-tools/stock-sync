@@ -24,7 +24,7 @@ from playwright.sync_api import sync_playwright
 
 APP_ID = os.environ["EBAY_APP_ID"]
 CERT_ID = os.environ["EBAY_CERT_ID"]
-REFRESH_TOKEN = os.environ["EBAY_REFRESH_TOKEN"]
+_ENV_REFRESH_TOKEN = os.environ.get("EBAY_REFRESH_TOKEN", "")
 SHEET_API_URL = os.environ["SHEET_API_URL"]
 SHEET_API_KEY = os.environ["SHEET_API_KEY"]
 DISCORD_WEBHOOK = os.environ.get("DISCORD_WEBHOOK", "")
@@ -97,7 +97,7 @@ def get_access_token():
     r = requests.post(
         TOKEN_URL,
         headers={"Authorization": auth, "Content-Type": "application/x-www-form-urlencoded"},
-        data={"grant_type": "refresh_token", "refresh_token": REFRESH_TOKEN, "scope": SCOPES},
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token(), "scope": SCOPES},
         timeout=30,
     )
     if r.status_code != 200:
@@ -105,15 +105,42 @@ def get_access_token():
     return r.json()["access_token"]
 
 
-# eBayのRefresh Tokenの期限（取り直したら TOKEN_ISSUED を書き換える）
-TOKEN_ISSUED = "2026-11-02"
+# eBayのRefresh Token：管理表のApps Scriptに保管（取り直しはメールのリンクからeBayで「同意」を押すだけ）。
+# Apps Scriptに無いときだけGitHubのSecrets（EBAY_REFRESH_TOKEN）を使う
+TOKEN_ISSUED = "2026-11-05"   # Secretsのトークンを使うときの取得日
 TOKEN_DAYS = 547   # 約18か月
-TOKEN_HOWTO = ("取り直し方：Claudeに「eBayのトークンを取り直したい」と伝えてください。"
-               "取り直すまで、在庫チェック・出品・売り切れ時の出品停止がすべて止まります。")
+_TOKEN = {}
+
+
+def _token_store():
+    """Apps Scriptから {token, issued, login_url} を1回だけ読む。読めなければ空"""
+    if "store" not in _TOKEN:
+        _TOKEN["store"] = {}
+        try:
+            d = sheet("ebaytoken")
+            if d.get("need_cert"):   # 初回だけ、受け取りに必要なApp ID・Cert IDをApps Scriptに預ける
+                d = sheet("ebaytoken", app_id=APP_ID, cert=CERT_ID)
+            _TOKEN["store"] = d
+        except Exception:
+            print("トークンの保管場所が読めませんでした（Secretsのトークンを使います）")
+    return _TOKEN["store"]
+
+
+def refresh_token():
+    return _token_store().get("token") or _ENV_REFRESH_TOKEN
+
+
+def token_howto():
+    url = _token_store().get("login_url")
+    if url:
+        return ("直し方：下のリンクを押してeBayにログインし、「同意（Agree）」を押すだけで完了します（スマホでもOK・2分）。\n"
+                f"{url}\n\n直すまで、在庫チェック・出品・売り切れ時の出品停止がすべて止まります。")
+    return ("取り直し方：Claudeに「eBayのトークンを取り直したい」と伝えてください。"
+            "取り直すまで、在庫チェック・出品・売り切れ時の出品停止がすべて止まります。")
 
 
 def token_days_left():
-    issued = datetime.strptime(TOKEN_ISSUED, "%Y-%m-%d").replace(tzinfo=JST)
+    issued = datetime.strptime(_token_store().get("issued") or TOKEN_ISSUED, "%Y-%m-%d").replace(tzinfo=JST)
     return (issued + timedelta(days=TOKEN_DAYS) - datetime.now(JST)).days
 
 
@@ -122,7 +149,7 @@ def token_warning():
     left = token_days_left()
     if left <= 60 and datetime.now(JST).hour == 9:
         alert(f"【要対応】eBayのトークンの期限まであと{max(left, 0)}日です",
-              f"eBayとツールをつなぐトークン（Refresh Token）の期限が近づいています（あと約{max(left, 0)}日）。\n\n{TOKEN_HOWTO}")
+              f"eBayとツールをつなぐトークン（Refresh Token）の期限が近づいています（あと約{max(left, 0)}日）。\n\n{token_howto()}")
 
 
 FINANCES_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.finances"
@@ -139,7 +166,7 @@ def get_finances_token(scope=FINANCES_SCOPE):
         r = requests.post(
             TOKEN_URL,
             headers={"Authorization": auth, "Content-Type": "application/x-www-form-urlencoded"},
-            data={"grant_type": "refresh_token", "refresh_token": REFRESH_TOKEN, "scope": scope},
+            data={"grant_type": "refresh_token", "refresh_token": refresh_token(), "scope": scope},
             timeout=30,
         )
         return r.json().get("access_token") if r.status_code == 200 else None
@@ -1522,7 +1549,7 @@ def _main():
     except RuntimeError as e:
         # トークンが切れた・無効になった → すぐにメールで知らせる（このままだと売り切れても出品が止まらない）
         alert("【緊急】eBayとツールの接続が切れました",
-              f"eBayのトークンが使えなくなったため、在庫チェックができません。\n\nエラー：{str(e)[:200]}\n\n{TOKEN_HOWTO}")
+              f"eBayのトークンが使えなくなったため、在庫チェックができません。\n\nエラー：{str(e)[:200]}\n\n{token_howto()}")
         raise
     updates, blocked, counts, stopped, researched, listed = [], 0, {}, 0, 0, 0
     sold_on_ebay, sold_n = {}, 0
