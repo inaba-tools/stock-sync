@@ -1,0 +1,58 @@
+name: eBayコネクタの鍵わたし
+
+# ClaudeのeBayコネクタ（Cloudflareの ebay-mcp）に、ハコペンと同じeBayの鍵を渡す。
+# 鍵はSecretsから直接送り、ログには出さない。受け取り側はGitHubの本人確認（OIDC）で
+# このリポジトリのこのワークフローからの送信だけを受け付ける。
+# 鍵を作り直したとき（App ID・Cert IDの変更など）だけ、手動でもう一度実行する。
+# Refresh Tokenはコネクタが管理表のApps Scriptから毎回最新を読むので、取り直しのたびに実行しなくてよい。
+
+on:
+  push:
+    paths:
+      - .github/workflows/ebay_mcp_setup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 鍵を渡す
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.error, urllib.request
+          req = urllib.request.Request(os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=ebay-mcp",
+                                       headers={"Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
+          jwt = json.load(urllib.request.urlopen(req, timeout=30))["value"]
+          body = json.dumps({
+              "app_id": os.environ["EBAY_APP_ID"], "cert_id": os.environ["EBAY_CERT_ID"],
+              "refresh_token": os.environ.get("EBAY_REFRESH_TOKEN", ""),
+              "sheet_url": os.environ["SHEET_API_URL"], "sheet_key": os.environ["SHEET_API_KEY"],
+          }).encode()
+          for i in range(3):
+              try:
+                  r = urllib.request.urlopen(urllib.request.Request(
+                      "https://ebay-mcp.hakopen.workers.dev/setup", data=body, method="POST",
+                      headers={"Authorization": "Bearer " + jwt, "Content-Type": "application/json", "User-Agent": "stock-sync-setup/1.0"}), timeout=60)
+                  print(json.load(r).get("message", "OK"))
+                  break
+              except urllib.error.HTTPError as e:
+                  print("失敗:", e.code, e.read()[:300].decode(errors="ignore"))
+                  if e.code < 500:
+                      raise SystemExit(1)
+              except Exception as e:
+                  print("失敗:", type(e).__name__)
+              time.sleep(10)
+          else:
+              raise SystemExit(1)
+          PY
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
+          SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
+          SHEET_API_KEY: ${{ secrets.SHEET_API_KEY }}

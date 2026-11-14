@@ -1,0 +1,47 @@
+name: 見張り役（3回連続失敗だけ知らせる）
+
+# GitHubの失敗メールは止めてあり、本当に壊れている時だけ
+# このIssue経由でメールが届く。直ったら自動で閉じる。
+
+on:
+  schedule:
+    - cron: "41 */3 * * *"   # 3時間ごと
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 全部の自動処理を確認
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SELF: ${{ github.workflow }}
+        run: |
+          set -u
+          gh api "repos/$REPO/actions/workflows" --jq '.workflows[] | select(.state=="active") | "\(.id)\t\(.name)"' |
+          while IFS=$'\t' read -r id name; do
+            [ "$name" = "$SELF" ] && continue
+            res=$(gh api "repos/$REPO/actions/workflows/$id/runs?status=completed&per_page=10" \
+              --jq '[.workflow_runs[] | select(.conclusion!="cancelled" and .conclusion!="skipped") | .conclusion][0:3] | join(",")' 2>/dev/null) || continue
+            title="【要対応】${name} が3回続けて失敗"
+            open=$(gh issue list -R "$REPO" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+            if [ "$res" = "failure,failure,failure" ]; then
+              if [ -z "$open" ]; then
+                url=$(gh api "repos/$REPO/actions/workflows/$id/runs?per_page=1" --jq '.workflow_runs[0].html_url')
+                gh issue create -R "$REPO" --title "$title" \
+                  --body "一時的な失敗ではなく、3回続けて失敗しています。
+          直近の実行: $url
+          直ったらこの通知は自動で閉じます。"
+                echo "通知: $name"
+              fi
+            elif [ -n "$open" ] && [ "${res%%,*}" = "success" ]; then
+              gh issue close -R "$REPO" "$open" --comment "直りました（最新の実行が成功）。"
+              echo "解除: $name"
+            fi
+          done

@@ -1,0 +1,56 @@
+name: 売れた直後の売上反映
+
+on:
+  workflow_dispatch:          # eBayで売れた瞬間・買い手から質問が来た／返信の「送る」にチェックしたときに、管理表（Apps Script）から呼ばれる
+    inputs:
+      job:
+        description: "sales（売上の反映）／buyermsg（買い手メッセージ）／camera（ハコペンのカメラ出品）"
+        required: false
+        default: "sales"
+
+concurrency:
+  group: sales
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: inaba-tools/stock-sync-core   # 中身は非公開リポジトリ（読み取り専用キーで取る）
+          token: ${{ secrets.CORE_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # 2026/11/13 買い手メッセージの返信案で、仕入れ先（メルカリ）の説明・写真を読むためにブラウザを入れる
+      - name: ブラウザのキャッシュ
+        if: startsWith(inputs.job, 'buyermsg')
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('requirements.txt') }}
+      - name: ブラウザの準備
+        if: startsWith(inputs.job, 'buyermsg')
+        continue-on-error: true
+        run: bash .github/scripts/install_browser.sh
+
+      - name: 売上シートに手数料・入金額・注文番号などを書く（または買い手メッセージ）
+        run: python monitor.py ${{ inputs.job || 'sales' }} > "$RUNNER_TEMP/out.log" 2>&1 || { echo "失敗しました（記録は非公開）"; exit 1; }
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          EBAY_REFRESH_TOKEN: ${{ secrets.EBAY_REFRESH_TOKEN }}
+          SHEET_API_URL: ${{ secrets.SHEET_API_URL }}
+          SHEET_API_KEY: ${{ secrets.SHEET_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # 無料枠のみ（買い手メッセージの訳と返信案）

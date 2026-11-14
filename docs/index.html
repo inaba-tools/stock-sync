@@ -1,0 +1,2001 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="ハコペン">
+<meta name="theme-color" content="#070908">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=bg2">
+<link rel="icon" href="icon-192.png">
+<title>ハコペン</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{--bg:#f4f3ef;--card:#fff;--text:#1d1d1b;--sub:#6b6a66;--line:rgba(0,0,0,.08);--acc:#0a7d5a;--accbg:#e1f5ee;--warn:#a35a00;--warnbg:#fdf1dc;--red:#b3261e;--redbg:#fce8e6;--blue:#185fa5;--bluebg:#e6f1fb}
+@media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#1e1e1c;--text:#f1f0ec;--sub:#a3a29c;--line:rgba(255,255,255,.1);--acc:#5dcaa5;--accbg:#0c3a2d;--warn:#f0b35a;--warnbg:#3a2a10;--red:#f19a92;--redbg:#3d1714;--blue:#85b7eb;--bluebg:#0f2a45}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:var(--bg);color:var(--text);font-family:-apple-system,"Hiragino Sans",system-ui,sans-serif;font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+#scroll{position:fixed;inset:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+input,textarea{-webkit-user-select:text;user-select:text}
+main{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 96px)}
+h1{font-size:26px;font-weight:700;margin:4px 0 14px}
+h2{font-size:15px;font-weight:600;color:var(--sub);margin:22px 0 8px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:10px;border:.5px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px}
+.grow{flex:1;min-width:0}
+.t{font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s{font-size:13px;color:var(--sub)}
+.dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);flex:none}
+.dot.ok{background:var(--acc);border-color:var(--acc)}
+button{font:inherit;font-size:14px;font-weight:600;border:0;border-radius:999px;padding:9px 16px;background:var(--text);color:var(--card);cursor:pointer;flex:none}
+button.sub{background:var(--bg);color:var(--text);border:.5px solid var(--line)}
+button:disabled{opacity:.4}
+input,textarea{font:inherit;font-size:16px;border:.5px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--bg);color:var(--text);width:100%}
+.tag{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px}
+.tag.ok{background:var(--accbg);color:var(--acc)}.tag.warn{background:var(--warnbg);color:var(--warn)}.tag.red{background:var(--redbg);color:var(--red)}.tag.blue{background:var(--bluebg);color:var(--blue)}
+.big{font-size:44px;font-weight:700;line-height:1.15;letter-spacing:-.5px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.mini{background:var(--card);border-radius:16px;padding:12px 14px;border:.5px solid var(--line)}
+.mini b{display:block;font-size:24px}
+nav{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:.5px solid var(--line);display:flex;justify-content:space-around;padding:8px 0 calc(env(safe-area-inset-bottom) + 6px);z-index:5}
+nav a{flex:1;text-align:center;font-size:11px;color:var(--sub);text-decoration:none;position:relative}
+nav a svg{display:block;margin:0 auto 2px;width:24px;height:24px}
+nav a.on{color:var(--acc)}
+nav .badge{position:absolute;top:-2px;left:calc(50% + 6px);background:var(--red);color:#fff;font-size:11px;border-radius:999px;padding:0 6px;line-height:17px}
+.bubble{max-width:82%;padding:10px 13px;border-radius:18px;margin:6px 0;white-space:pre-wrap;word-break:break-word;font-size:15px}
+.en{font-size:12px;opacity:.75;margin-top:4px}
+.empty{text-align:center;color:var(--sub);padding:28px 0;font-size:14px}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--text);color:var(--card);padding:10px 18px;border-radius:999px;font-size:14px;z-index:9;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1}
+a.lnk{color:var(--blue);text-decoration:none}
+.back{background:none;color:var(--acc);padding:4px 0;font-size:16px}
+.sticky{position:sticky;bottom:calc(env(safe-area-inset-bottom) + 74px);background:var(--bg);padding:8px 0}
+.hide{display:none}
+
+:root{--ease:cubic-bezier(.22,.8,.24,1)}
+#app.enter{animation:pg .26s var(--ease)}
+@keyframes pg{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+button,.card[onclick],.lrow,nav a,.chip{transition:transform .16s var(--ease),opacity .16s,background-color .2s}
+button:active,.card[onclick]:active,.lrow:active,.chip:active{transform:scale(.96)}
+nav a:active{transform:scale(.9)}
+nav a.on svg{animation:pop .38s var(--ease)}
+@keyframes pop{0%{transform:scale(.82)}55%{transform:scale(1.14)}100%{transform:scale(1)}}
+nav a{-webkit-touch-callout:none;padding:4px 0}
+.toast{transform:translate(-50%,12px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
+.toast.on{transform:translate(-50%,0)}
+#pbar{position:fixed;top:0;left:0;height:2px;width:0;background:var(--acc);z-index:20;opacity:0;transition:opacity .2s}
+#pbar.on{opacity:1;animation:pb 1.2s var(--ease) infinite}
+@keyframes pb{0%{width:0;left:0}50%{width:60%;left:20%}100%{width:0;left:100%}}
+/* トーク：LINEのブラック風 */
+body.talk{--bg:#000;--card:#111;--text:#f2f2f2;--sub:#9a9a9f;--line:#262628;--acc:#4cbf5e;--red:#ff6b5e;color-scheme:dark}
+body.talk nav{background:#000}
+.lrow{display:flex;gap:12px;align-items:center;padding:10px 2px;border-bottom:.5px solid var(--line);cursor:pointer}
+.av{width:46px;height:46px;border-radius:50%;background:#3a3a3c;color:#f2f2f2;display:grid;place-items:center;font-weight:700;font-size:17px;flex:none}
+.av.sm{width:34px;height:34px;font-size:14px;align-self:flex-start}
+.meta{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.tm{font-size:11px;color:var(--sub)}
+.unread{background:var(--acc);color:#0d1a0f;font-size:11px;font-weight:700;border-radius:999px;min-width:19px;line-height:19px;padding:0 6px;text-align:center}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rh{position:sticky;top:0;z-index:3;margin:calc(-1 * (env(safe-area-inset-top) + 16px)) -16px 0;padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;background:#111;display:flex;align-items:center;gap:8px;border-bottom:.5px solid var(--line)}
+.rh .back{font-size:26px;line-height:1;padding:2px 8px;color:#f2f2f2}
+.item{display:flex;align-items:center;gap:8px;margin:10px 0 4px;padding:10px 12px;background:#1c1c1e;border-radius:14px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;background:#2c2c2e;color:#f2f2f2;text-decoration:none;white-space:nowrap}
+.chip.g{background:var(--acc);color:#0d1a0f}
+.day{text-align:center;margin:14px 0 6px}.day span{background:rgba(255,255,255,.13);color:#e8ecf2;font-size:12px;padding:4px 12px;border-radius:999px}
+.msg{display:flex;align-items:flex-end;gap:6px;margin:6px 0;animation:bin .3s var(--ease) both}
+.msg.me{justify-content:flex-end}
+@keyframes bin{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+.msg .bubble{margin:0;max-width:74%;border:0;border-radius:18px;padding:8px 13px;line-height:1.5}
+.msg.them .bubble{background:#2c2c2e;color:#f2f2f2;border-top-left-radius:4px}
+.msg.me .bubble{background:#3f9d4b;color:#f3fff1;border-top-right-radius:4px}
+.msg time{font-size:10.5px;color:var(--sub);flex:none;margin-bottom:2px;text-align:right;line-height:1.3}
+.bubble .en{font-size:12px;opacity:.7;margin-top:5px;padding-top:5px;border-top:.5px solid rgba(255,255,255,.18)}
+body.room nav{display:none}
+body.room main{padding-bottom:calc(env(safe-area-inset-bottom) + 150px)}
+.ibar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#111;border-top:.5px solid var(--line);padding:8px 10px calc(env(safe-area-inset-bottom) + 8px)}
+.ibar .in{max-width:560px;margin:0 auto}
+.ibar textarea{background:#1c1c1e;border:0;border-radius:20px;resize:none;max-height:140px;line-height:1.45;padding:9px 14px}
+.pre{font-size:12px;color:var(--sub);margin:0 6px 6px;white-space:pre-wrap;max-height:84px;overflow:auto}
+.pre b{color:#f2f2f2;font-weight:600}
+.sendb{background:var(--acc);color:#0d1a0f;width:40px;height:40px;padding:0;display:grid;place-items:center;flex:none}
+.sw{position:relative;overflow:hidden}
+.swbg{position:absolute;inset:0;display:flex;align-items:center;padding-left:18px;background:#1c3a24;color:#7fd99a;font-size:13px;font-weight:700;transition:background .15s}
+.sw.go .swbg{background:var(--acc);color:#0d1a0f}
+.sw .lrow{position:relative;background:var(--bg);transition:transform .25s var(--ease)}
+
+.chip.red{background:#e5484d;color:#fff}.chip.blue{background:#2f7cf6;color:#fff}
+.msg.pend .bubble{opacity:.75}
+.steps{display:flex;margin:12px 0 6px;gap:0}
+.st{flex:1;text-align:center;position:relative;font-size:10.5px;color:var(--sub)}
+.st i{display:block;width:12px;height:12px;border-radius:50%;margin:0 auto 4px;background:var(--line);position:relative;z-index:1;transition:background .3s}
+.st::before{content:"";position:absolute;top:5px;left:-50%;width:100%;height:2px;background:var(--line)}
+.st:first-child::before{display:none}
+.st.done i,.st.now i{background:var(--acc)}.st.done::before,.st.now::before{background:var(--acc)}
+.st.now i{box-shadow:0 0 0 4px var(--accbg);animation:pulse 1.6s ease-in-out infinite}
+.st.now span{color:var(--text);font-weight:600}
+@keyframes pulse{50%{box-shadow:0 0 0 7px transparent}}
+#ptr{position:fixed;top:calc(env(safe-area-inset-top) + 6px);left:50%;transform:translate(-50%,-40px);opacity:0;z-index:8;width:36px;height:36px;border-radius:50%;background:var(--card);color:var(--acc);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#ptr.spin{opacity:1!important;transform:translate(-50%,20px)!important}#ptr.spin svg{animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+.rtag{font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px}
+.rtag.no{background:#5a2626;color:#ff8a80}.rtag.wait{background:#4a3d16;color:#f0c75a}.rtag.ok{background:#22302a;color:#7fd99a}
+.mswipe{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;-webkit-overflow-scrolling:touch}
+.mswipe::-webkit-scrollbar{display:none}
+.mp{flex:0 0 100%;scroll-snap-align:center;padding:4px 16px 0;box-sizing:border-box}
+.mtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -16px 10px;padding:0 16px}
+.mtabs::-webkit-scrollbar{display:none}
+.mt{background:var(--card);color:var(--sub);border:.5px solid var(--line);padding:6px 14px;font-size:13px}
+.mt.on{background:var(--text);color:var(--card)}
+
+.totb{text-align:right;flex:none;padding-bottom:6px}.totb b{display:block;font-size:17px}
+.mini.tap{cursor:pointer;transition:transform .16s var(--ease)}.mini.tap:active{transform:scale(.96)}
+#sheet{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,0);pointer-events:none;transition:background .25s}
+#sheet.on{background:rgba(0,0,0,.5);pointer-events:auto}
+#shb{position:absolute;left:0;right:0;bottom:0;max-height:86%;overflow-y:auto;background:var(--bg);border-radius:20px 20px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 20px);transform:translateY(100%);transition:transform .32s var(--ease);max-width:560px;margin:0 auto}
+#sheet.on #shb{transform:none}
+.shh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.shh .t{font-size:18px}
+.x{background:var(--card);color:var(--text);padding:6px 11px;border:.5px solid var(--line)}
+.dl{display:flex;justify-content:space-between;padding:10px 2px;border-bottom:.5px solid var(--line);font-size:15px}.dl.sum{border-bottom:0;font-size:16px}.dl.sum b{font-size:18px}
+.dl2{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:12px;color:var(--sub)}
+.skip{background:none;color:var(--sub);border:.5px solid var(--line);font-size:11px;padding:3px 10px;margin-left:8px;vertical-align:middle}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ホーム：路線図 */
+body.home-on #scroll{overflow:hidden}
+.home{display:flex;flex-direction:column;height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 104px)}
+.hhead{display:flex;align-items:flex-start;gap:10px;margin:2px 0 10px}
+.hnum{font-size:32px;font-weight:700;letter-spacing:-.5px;line-height:1.15;font-variant-numeric:tabular-nums}.hnum.neg{color:var(--red)}
+.addx{display:flex;align-items:center;gap:4px;background:var(--accbg);color:var(--acc);padding:9px 14px}
+.route{position:relative;display:flex;margin:4px -6px 2px;padding-bottom:8px}
+.rline{position:absolute;left:10%;right:10%;top:21px;height:2px;background:var(--line);z-index:0}
+.rbar{position:absolute;left:0;bottom:0;height:3px;border-radius:3px;background:var(--acc);transition:transform .35s var(--ease),width .35s var(--ease)}
+.stop{flex:1;background:none;color:var(--sub);padding:0;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;z-index:1;border-radius:0}
+.dotc{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:.5px solid var(--line);transition:transform .3s var(--ease),box-shadow .3s}
+.dotc b{font-size:17px;color:var(--text)}
+.stop.me .dotc{background:var(--accbg);color:var(--acc);border-color:transparent}.stop.me .dotc b{color:var(--acc)}
+.stop.on{color:var(--text)}.stop.on .dotc{transform:scale(1.12);box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--acc)}
+.stop.me .dotc b{animation:pulseN 2s ease-in-out infinite}
+@keyframes pulseN{50%{transform:scale(1.15)}}
+.legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);margin:4px 2px 8px}
+.lg{width:10px;height:10px;border-radius:50%;background:var(--card);border:.5px solid var(--line);margin-left:6px}.lg.me{background:var(--acc);border:0;margin-left:0}
+.rswipe{flex:1;min-height:0;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;margin:0 -16px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.rswipe::-webkit-scrollbar{display:none}
+.rp{flex:0 0 100%;scroll-snap-align:center;padding:0 16px 8px;overflow-y:auto;box-sizing:border-box}
+.rph{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700;margin:2px 2px 8px}
+.ci{animation:cin .42s var(--ease) both}
+@keyframes cin{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+.card.out{animation:cout .38s var(--ease) forwards}
+@keyframes cout{to{opacity:0;transform:translateX(70%) rotate(3deg)}}
+.act{margin-top:10px;justify-content:flex-end;gap:8px}
+.act input{flex:1}
+.ok-mark{color:var(--acc)}
+details.more summary{list-style:none;text-align:center;font-size:13px;color:var(--acc);padding:8px;cursor:pointer}
+details.more summary::-webkit-details-marker{display:none}
+details.more[open] summary{display:none}
+details.more[open] .card{animation:cin .35s var(--ease) both}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ck{background:var(--card);color:var(--text);border:.5px solid var(--line);padding:7px 13px}
+.ck.on{background:var(--acc);color:#fff;border-color:transparent;animation:pop .3s var(--ease)}
+.bigin{font-size:24px;font-weight:700;padding:10px 14px}
+.stepper{display:flex;align-items:center;gap:8px}.stepper b{min-width:44px;text-align:center;font-size:18px}
+.stepper button{width:38px;height:38px;padding:0}
+.seg{display:flex;gap:6px}.seg button{flex:1;background:var(--card);color:var(--text);border:.5px solid var(--line)}.seg button.on{background:var(--text);color:var(--card)}
+
+/* ネテルマニに合わせる（色・書体・大きさ）2026/11/12 */
+:root{--bg:#FFFFFF;--card:#FFFFFF;--field:#EEF2F1;--panel:#F4F6F5;--text:#1D2B2A;--sub:#566563;--line:#E0E6E4;--line2:#CBD5D3;
+  --acc:#2F6460;--onacc:#FFFFFF;--accbg:#DDEBE9;--warn:#8A5426;--warnbg:#F6EBDD;--red:#C62F26;--redbg:#FBE9E7;--blue:#2B4E8C;--bluebg:#E4ECF7;
+  --font:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#000000;--card:#151918;--field:#1E2423;--panel:#0E1111;--text:#F1F4F3;--sub:#A3B0AD;--line:#232A29;--line2:#34403E;
+  --acc:#4FD1C5;--onacc:#0B0F0E;--accbg:rgba(79,209,197,.16);--warn:#C98A3E;--warnbg:rgba(201,138,62,.16);--red:#E5484D;--redbg:rgba(229,72,77,.16);--blue:#8FB2EE;--bluebg:rgba(143,178,238,.14)}}
+html,body{font:14px/1.6 var(--font);letter-spacing:.01em}
+h1{font-size:17px;font-weight:600;margin:6px 0 14px}
+h2{font-size:13px;font-weight:600}
+b,strong{font-weight:600}
+.t{font-size:14px;font-weight:500}
+.s{font-size:12.5px}
+.card{border-radius:14px;border:1px solid var(--line);padding:12px 14px}
+button{font-size:13px;font-weight:600;border-radius:10px;min-height:36px;padding:0 14px;background:var(--acc);color:var(--onacc)}
+button.sub{background:var(--card);color:var(--text);border:1px solid var(--line2);font-weight:500}
+button:active{transform:scale(.95)}
+input,textarea{font:14px var(--font);background:var(--field);border:0;border-radius:12px;color:var(--text)}
+nav{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none;border-top:1px solid var(--line)}
+nav a{font-size:10.5px}nav a.on{color:var(--acc);font-weight:600}
+nav a svg{width:23px;height:23px}
+nav .badge{background:var(--red);font-size:10px;line-height:16px;font-weight:600}
+.tag{font-size:11px;font-weight:600;border-radius:6px}
+.big{font-weight:600}.mini b{font-weight:600}
+.hnum{font-size:28px;font-weight:600;letter-spacing:0}
+.addx{background:var(--acc);color:var(--onacc);border-radius:12px}
+.dotc{border:1px solid var(--line);background:var(--card)}
+.dotc b{font-size:15px;font-weight:600}
+.stop{font-size:10.5px}
+.stop.me .dotc{background:var(--accbg);color:var(--acc)}
+.rph{font-size:14px;font-weight:600}
+.ck{border-radius:10px;font-weight:500;background:var(--field);border:0}
+.ck.on{background:var(--acc);color:var(--onacc)}
+.seg{background:var(--field);padding:4px;border-radius:14px;gap:4px}
+.seg button{background:none;color:var(--sub);border:0;font-weight:500}
+.seg button.on{background:var(--acc);color:var(--onacc);font-weight:600}
+.mt{border-radius:10px;font-weight:500}.mt.on{background:var(--acc);color:var(--onacc)}
+.toast{background:#3A3A3C;color:#fff;border-radius:14px;font-size:12.5px}
+#shb{background:var(--bg);border-radius:20px 20px 0 0}
+.x{border-radius:10px;font-weight:500}
+.unread{font-weight:600}
+.empty{font-size:13px}
+.lg.me{background:var(--acc)}
+
+/* いろんな色：段ごと・区分ごと 2026/11/12 */
+:root{--c-buy:#D85A30;--c-wait:#2F6FD0;--c-pack:#7A55D6;--c-ship:#0F8A7E;--c-done:#2E8B47;--c-exp:#C2416F;--onc:#FFFFFF;
+  --k0:#B5651D;--k1:#7A55D6;--k2:#2F6FD0;--k3:#0F8A7E;--k4:#C2416F;--k5:#5E6B69}
+@media (prefers-color-scheme:dark){:root{--c-buy:#FF8A65;--c-wait:#6FA8FF;--c-pack:#B39DFF;--c-ship:#4FD1C5;--c-done:#7BD88F;--c-exp:#FF7AA8;--onc:#0B0F0E;
+  --k0:#F0A868;--k1:#B39DFF;--k2:#6FA8FF;--k3:#4FD1C5;--k4:#FF7AA8;--k5:#A3B0AD}}
+.stop[data-k=buy],.rp[data-k=buy]{--sc:var(--c-buy)}.stop[data-k=wait],.rp[data-k=wait]{--sc:var(--c-wait)}
+.stop[data-k=pack],.rp[data-k=pack]{--sc:var(--c-pack)}.stop[data-k=ship],.rp[data-k=ship]{--sc:var(--c-ship)}
+.stop[data-k=done],.rp[data-k=done]{--sc:var(--c-done)}
+.stop .dotc{color:var(--sc);border:1.5px dashed color-mix(in srgb,var(--sc) 55%,transparent);background:var(--card)}
+.stop .dotc b{color:var(--sc)}
+.stop.me .dotc{background:color-mix(in srgb,var(--sc) 18%,var(--card));border:1.5px solid var(--sc)}
+.stop{position:relative;z-index:1}.stop .dotc{position:relative;z-index:1}   /* 線が丸の上に透けないように（11/12） */
+.stop.me .dotc b{color:var(--sc)}
+.stop.on{color:var(--sc)}.stop.on .dotc{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--sc)}
+.lg{border:1.5px dashed var(--sub);background:none}.lg.me{border:1.5px solid var(--sub);background:color-mix(in srgb,var(--sub) 30%,transparent)}
+.rp .rph{color:var(--sc)}
+.rp button:not(.sub){background:var(--sc);color:var(--onc)}
+.rp .card{border-left:3px solid var(--sc)}
+.rp .st.done i,.rp .st.now i,.rp .st.done::before,.rp .st.now::before{background:var(--sc)}
+.rp .st.now i{box-shadow:0 0 0 4px color-mix(in srgb,var(--sc) 22%,transparent)}
+.addx{background:var(--c-exp);color:var(--onc)}
+.ck{background:color-mix(in srgb,var(--cc) 14%,transparent);color:var(--cc)}
+.ck.on{background:var(--cc);color:var(--onc)}
+#shb button.full{background:var(--c-exp);color:var(--onc)}
+/* 経費の画面のずれ直し */
+.g2f{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:8px;margin-top:10px}
+.g2f label{display:flex;flex-direction:column;gap:4px;min-width:0}
+.g2f input{width:100%;min-width:0;height:44px;padding:0 12px;box-sizing:border-box;-webkit-appearance:none;appearance:none;text-align:left;font-size:14px}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
+.bigin{width:100%;box-sizing:border-box;height:56px}
+.exl{min-height:300px}
+nav a[data-t=home].on{color:var(--c-buy)}nav a[data-t=chat].on{color:var(--c-done)}nav a[data-t=money].on{color:var(--c-wait)}nav a[data-t=settings].on{color:var(--c-pack)}
+.exr{display:flex;align-items:center;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.exr .ell{font-size:14px}.exr b{font-size:14px;flex:none;font-variant-numeric:tabular-nums}
+#shb{will-change:transform;contain:layout paint}
+#sheet{will-change:background}
+
+/* イメージカラー：氷の水色で統一（2026/11/12 本人決定） */
+:root{--acc:#0E7FBF;--onacc:#FFFFFF;--accbg:#E1F1FA;--onc:#FFFFFF}
+@media (prefers-color-scheme:dark){:root{--acc:#5BC8FF;--onacc:#04202E;--accbg:rgba(91,200,255,.16);--onc:#04202E}}
+:root{--c-buy:var(--acc);--c-wait:var(--acc);--c-pack:var(--acc);--c-ship:var(--acc);--c-done:var(--acc);--c-exp:var(--acc);
+  --k0:var(--acc);--k1:var(--acc);--k2:var(--acc);--k3:var(--acc);--k4:var(--acc);--k5:var(--acc)}
+nav a.on,nav a[data-t].on{color:var(--acc)}
+
+/* トークも水色 */
+body.talk{--acc:#5BC8FF;--onacc:#04202E}
+body.talk .msg.me .bubble{background:#1F86C2;color:#F2FAFF}
+body.talk .unread,body.talk .sendb,body.talk .chip.g{color:#04202E}
+body.talk .rtag.ok{background:#12304A;color:#8FD8FF}
+body.talk .swbg{background:#0E2A3D;color:#8FD8FF}
+
+/* トークの入力欄：LINEくらいの大きさ・AIの案は上に提案 */
+#dock .ibar{padding:6px 10px calc(env(safe-area-inset-bottom) + 6px)}
+.ibar textarea{font-size:15px;line-height:1.4;min-height:36px;padding:7px 14px;border-radius:18px}
+.ibar .sendb{width:36px;height:36px;min-height:36px;border-radius:50%}
+.ibar .sendb svg{width:18px;height:18px}
+.ibar .row{align-items:flex-end}
+.pre{font-size:11px;margin:0 6px 5px;max-height:60px}
+.sug{background:#12202A;border:1px solid #1E3A4E;border-radius:14px;padding:8px 10px;margin-bottom:6px;animation:cin .3s var(--ease) both;transition:opacity .2s,transform .2s}
+.sug.gone{opacity:0;transform:translateY(8px)}
+.sgh{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#8FD8FF;font-weight:600;margin-bottom:3px}
+.sgt{font-size:13.5px;color:#E8F6FF;line-height:1.5;max-height:66px;overflow:auto;cursor:pointer}
+.sgu{display:block;font-size:10.5px;color:#7FA9C2;margin-top:3px}
+.sug .skip{min-height:0;height:24px;padding:0 9px;font-size:11px;background:#1F2A31;color:#B8C7D0;border-radius:8px}
+body.room main{padding-bottom:calc(env(safe-area-inset-bottom) + 110px)}
+
+/* 下のタブ・上の帯・大きさをネテルマニ／フクリに合わせる */
+#topcover{position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top);background:var(--bg);z-index:25;pointer-events:none}
+body.room #topcover{background:#111}
+nav{min-height:62px;padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);align-items:center;background:var(--bg);border-top:1px solid var(--line);backdrop-filter:none;-webkit-backdrop-filter:none}
+nav a{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;font-size:10.5px}
+nav a svg{width:24px;height:24px;margin:0}
+main{padding-top:calc(env(safe-area-inset-top) + 4px);padding-bottom:calc(env(safe-area-inset-bottom) + 84px)}
+main>h1,h1{min-height:44px;display:flex;align-items:center;margin:0 0 6px}
+.home{height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 72px)}
+.hhead{margin-top:8px}
+#app.enter{animation:pgf .22s ease-out}
+@keyframes pgf{from{opacity:0}to{opacity:1}}
+.rh{margin-top:calc(-1 * (env(safe-area-inset-top) + 4px));padding-top:calc(env(safe-area-inset-top) + 6px)}
+/* AIの案：自分側の吹き出し（点線・薄め）。押すと入力欄へ */
+.msg.sugb{cursor:pointer;transition:opacity .2s,transform .2s}
+body.talk .msg.sugb .bubble{background:rgba(91,200,255,.08);border:1.5px dashed #3E9FD6;color:#D6EEFF}
+.msg.sugb time{color:#7FC4EC}
+.msg.sugb:active{transform:scale(.97)}
+.msg.sugb.gone{opacity:0;pointer-events:none;height:0;margin:0;overflow:hidden;transition:opacity .15s}
+.msg.sugb:not(.gone){animation:bin .35s var(--ease) both}
+.msg.sugb{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:opacity .2s,transform .45s}
+.msg.sugb .bubble{position:relative;overflow:hidden}
+.msg.sugb .bubble::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(91,200,255,.35),rgba(91,200,255,.15));transform:scaleX(0);transform-origin:left;pointer-events:none}
+.msg.sugb.hold{transform:scale(.96)}
+.msg.sugb.hold .bubble::after{transform:scaleX(1);transition:transform .45s linear}
+.flyb{position:fixed;z-index:40;margin:0;pointer-events:none;background:#1F86C2;color:#F2FAFF;border:0;border-radius:18px;padding:8px 13px;line-height:1.5;font-size:15px;transform-origin:left top}
+.flyb .en{display:none}
+textarea.got{animation:got .6s ease-out}
+@keyframes got{0%{box-shadow:0 0 0 0 rgba(91,200,255,.7)}100%{box-shadow:0 0 0 10px rgba(91,200,255,0)}}
+.msg.sugb.hold .bubble{border-color:#8FD8FF;background:rgba(91,200,255,.18)}
+
+/* 画面は全部日本語（英語は出さない） */
+body.talk .bubble .en{display:none}
+
+.swdel{position:absolute;inset:0;display:none;align-items:center;justify-content:flex-end;padding-right:18px;background:#3A1416;color:#FF8A80;font-size:13px;font-weight:700;transition:background .15s}
+.sw.left .swbg{display:none}.sw.left .swdel{display:flex}
+.sw.godel .swdel{background:#E5484D;color:#fff}
+.sw.bye{transition:height .3s var(--ease),opacity .3s;opacity:0;overflow:hidden}
+
+/* トーク一覧：選択・非表示 */
+.lh{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:44px;margin-bottom:6px}
+.lh h1{margin:0;min-height:0;justify-content:center}
+.hb{background:none;color:var(--acc);font-weight:600;font-size:14px;padding:0 4px;min-height:32px;justify-self:start}
+.hb.r{justify-self:end}
+.ck2{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line2);display:grid;place-items:center;flex:none;color:transparent;transition:all .2s var(--ease)}
+.ck2.on{background:var(--acc);border-color:var(--acc);color:var(--onacc);animation:pop .3s var(--ease)}
+.sw.selmode .lrow{animation:selin .25s var(--ease)}
+@keyframes selin{from{transform:translateX(-12px)}to{transform:none}}
+.lrow.picked{background:color-mix(in srgb,var(--acc) 10%,var(--bg))}
+.hidlink{display:block;margin:16px auto 0;background:none;color:var(--sub);font-weight:500;font-size:13px}
+.selbar{animation:upin .25s var(--ease)}
+@keyframes upin{from{transform:translateY(100%)}to{transform:none}}
+.selbar .in{gap:8px;align-items:center}
+.selbar button{min-height:38px;padding:0 16px}
+.selbar button.del{background:#E5484D;color:#fff}
+.selbar button:disabled{opacity:.35}
+body:not(.talk) #ptr{display:none}
+.pvrow .av{background:var(--acc);color:var(--onacc)}
+.pvrow .tm.new{color:var(--acc);font-weight:600}
+.msg.them.pv .bubble{outline:1px dashed var(--acc)}
+body:has(#dock .selbar) nav{display:none}
+
+/* フクリ・ネテルマニと同じ組み方：画面は動かない枠、中だけスクロール、タブは枠の一番下（透けない・ずれない） */
+html,body{position:static;height:100%;min-height:100%;overflow:hidden;overscroll-behavior:none}
+#scroll{position:fixed;top:0;left:0;right:0;bottom:calc(62px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+body.room #scroll,body:has(#nav.hide) #scroll{bottom:0}
+nav{position:fixed;left:0;right:0;bottom:0;height:calc(62px + env(safe-area-inset-bottom));min-height:0;box-sizing:border-box;background:var(--bg)!important;opacity:1;z-index:20}
+main{padding-bottom:16px}
+body.room main{padding-bottom:calc(env(safe-area-inset-bottom) + 110px)}
+.home{height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 62px - 24px)}
+#dock .ibar.selbar{bottom:0;z-index:30}
+/* 2026/11/14 本人：文字を打つときキーボードで入力欄が隠れないように、入力欄をキーボードのすぐ上へ上げる */
+#dock .ibar:not(.selbar){bottom:var(--kb,0px)}
+body.kbon #dock .ibar:not(.selbar){padding-bottom:6px}
+body.room.kbon #scroll{bottom:calc(var(--kb,0px) + 0px)}
+body.kbon.room main{padding-bottom:90px}
+
+/* 左スワイプで出るボタン：非表示（灰）・削除（赤） */
+.swdel{background:transparent!important;padding:0!important;justify-content:flex-end;align-items:stretch;gap:0}
+.sa{height:100%;width:75px;border-radius:0;min-height:0;padding:0;font-size:13px;font-weight:600;color:#fff}
+.sa.hid{background:#5A6066}.sa.del{background:#E5484D}
+.sw.godel .swdel{background:transparent}
+.sw .lrow{transition:transform .26s var(--ease)}
+
+/* 右スワイプで左側に出る「未読」ボタン */
+.swbg{background:transparent!important;padding:0!important;justify-content:flex-start;align-items:stretch}
+.sa.unr{width:90px;background:#1F86C2}
+.sw.left .swbg{display:none}
+
+.pft{color:var(--acc);font-weight:600;font-variant-numeric:tabular-nums}.pft.neg{color:var(--red)}
+.it3{display:flex;gap:8px;align-items:baseline;font-size:11px;line-height:inherit}
+.it3 .ell{flex:1;min-width:0}.it3 .pft{flex:none;font-size:11px}
+.sa.hid{width:90px}
+
+/* フクリと同じタブバー・文字の大きさ・サイズ感（2026/11/12 本人の希望） */
+@media (prefers-color-scheme:dark){:root{--bg:#070908;--card:#151918;--line:#232A29}}
+html,body{font-size:14px}
+nav{background:#000!important;border-top:1px solid #232A29!important;min-height:62px;height:auto;padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)!important;align-items:center;justify-content:space-around}
+@media (prefers-color-scheme:light){nav{background:#fff!important;border-top-color:var(--line)!important}}
+nav a{flex:1;min-width:0;padding:6px 2px!important;gap:2px!important;font-size:10.5px!important;font-weight:400!important;color:#A3B0AD;white-space:nowrap}
+nav a svg{width:22px!important;height:22px!important;stroke-width:2!important}
+nav a.on{color:var(--acc)!important;font-weight:600!important}
+nav a.on svg{animation:pop .4s cubic-bezier(.3,1.6,.5,1)}
+nav a:active{transform:scale(.95)}
+#scroll{bottom:calc(62px + env(safe-area-inset-bottom))}
+main{padding-top:calc(env(safe-area-inset-top) + 22px)}
+h1,main>h1{font-size:26px;font-weight:600;letter-spacing:.04em;min-height:40px;margin:0 0 10px}
+.lh{grid-template-columns:auto 1fr auto;gap:8px}
+.lh h1{justify-content:flex-start;margin:0}
+.lh .hb:first-child:empty{display:none}
+.hnum{font-size:44px;letter-spacing:-.02em;line-height:1.05}
+.card{padding:14px 16px}
+.home{height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 62px - 40px)}
+.rh{margin-top:calc(-1 * (env(safe-area-inset-top) + 22px))}
+
+/* タブバーの高さをフクリと同じに（62px＋iPhoneの下の余白） */
+nav{box-sizing:border-box!important;height:auto!important;min-height:62px!important}
+/* 11/13 本人：バーが高い→フクリと同じ（下の余白も62pxの中・文字の行の高さはふつう） */
+nav a{line-height:normal!important}
+
+.rhs{display:flex;gap:8px;align-items:baseline;font-size:11.5px;margin-top:1px}.rhs .ell{flex:0 1 auto;min-width:0}.rhs .pft{flex:none;font-size:11.5px}
+.rh .chip{flex:none;padding:5px 10px;font-size:11.5px}
+
+/* 在庫管理（2026/11/12） */
+.inv .ivsum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 10px}
+.inv .ivsum>div,.ivn>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.inv .ivsum>div{background:var(--panel,var(--card));border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.inv .ivsum b{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ivt{margin-bottom:8px}
+.ivl{flex:1;min-height:0;overflow-y:auto;margin:0 -16px;padding:0 16px 8px}
+.ivn{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+.ivn b{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.ivn b.pos{color:var(--acc)}
+.ivn b.neg{color:var(--red)}
+.inv .card[onclick]{cursor:pointer}
+.rp button.pkrow,.pkrow{display:flex;align-items:center;gap:8px;width:100%;margin-top:10px;padding:9px 12px;background:var(--field,var(--bg));color:var(--text);border:0;border-radius:10px;font-weight:500;font-size:13px;text-align:left}
+.pkrow svg{color:var(--acc);flex:none}
+.ck:disabled{opacity:.35}
+.pkck{--cc:var(--acc);--onc:var(--onacc)}
+/* 通知のオンオフ */
+.tgr{padding:12px 0;border-top:1px solid var(--line)}
+button.tg{box-sizing:border-box;width:51px;height:31px;min-height:0;border-radius:999px;border:0;background:#39393D;padding:0;position:relative;flex:none;transition:background .25s}
+button.tg:active{transform:none}
+.tg i{position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:transform .25s var(--ease);box-shadow:0 2px 4px rgba(0,0,0,.25)}
+.tg.on{background:var(--acc)}
+.tg.on i{transform:translateX(20px)}
+.nrow{cursor:pointer}
+.nic{width:32px;height:32px;border-radius:9px;background:#FF453A;color:#fff;display:grid;place-items:center;flex:none}
+.chev{color:var(--sub);flex:none}
+/* 利益表：フクリのFXと同じ形（2026/11/12） */
+#mswipe{gap:0}
+.mc{flex:0 0 100%;scroll-snap-align:center;box-sizing:border-box;padding:20px 22px;margin:0;background:var(--card);border:.5px solid var(--line);border-radius:20px}
+#mswipe>.mc{flex-basis:calc(100% - 32px);margin:0 16px}
+.ml{font-size:14px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:8px}
+.mtag{font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--accbg);color:var(--acc)}
+.mv{font-size:44px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin:6px 0 2px;line-height:1.15}
+.ms{font-size:12.5px;color:var(--sub)}
+.mk{font-size:13px;color:var(--sub);margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}.mk b{font-size:15px;font-variant-numeric:tabular-nums}
+.up{color:#3ddc97}.dn{color:var(--red)}
+@media (prefers-color-scheme:light){.up{color:#0a7d5a}}
+.mdots{text-align:center;font-size:11px;color:var(--sub);opacity:.7;margin:8px 0 10px}
+.mlst{padding:12px 16px 4px}
+.trbox{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.trr{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:13px;font-variant-numeric:tabular-nums;cursor:pointer}
+.trr:first-child{border-top:0}
+.trr .dt{color:var(--sub);width:42px;flex:none;white-space:nowrap}
+.trr .nm{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trr .pp{font-weight:700;font-size:14px;white-space:nowrap}
+.icb{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;padding:0;margin:0 0 10px;color:var(--text);
+  background:linear-gradient(160deg,rgba(255,255,255,.22),rgba(255,255,255,.06));backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);
+  border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 1px rgba(255,255,255,.45),inset 0 -1px 1px rgba(0,0,0,.18),0 8px 22px rgba(0,0,0,.35);transition:transform .15s}
+.icb:active{transform:scale(.92)}
+.icb svg{width:24px;height:24px}
+@media (prefers-color-scheme:light){.icb{background:linear-gradient(160deg,rgba(255,255,255,.95),rgba(255,255,255,.55));border-color:rgba(0,0,0,.08);box-shadow:inset 0 1px 1px #fff,0 6px 18px rgba(0,0,0,.12)}}
+#scroll.noscroll{overflow:hidden!important}
+.trr .pp small{font-size:10px;font-weight:600;color:var(--sub)}
+.etag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-right:6px;background:var(--redbg);color:var(--red)}
+/* カメラ出品（2026/11/12） */
+#camfab{position:fixed;right:18px;bottom:calc(62px + env(safe-area-inset-bottom) + 18px);z-index:20;width:58px;height:58px;border-radius:50%;border:0;
+  background:var(--acc);color:var(--onacc);display:none;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+body.stock-on #camfab{display:flex}
+body.stock-on .ivl{padding-bottom:84px}
+.camg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.camt{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--field,var(--card))}
+.camt img{width:100%;height:100%;object-fit:cover;display:block}
+.camt button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;padding:0;background:rgba(0,0,0,.6);color:#fff;font-size:14px}
+.camadd{aspect-ratio:1;border-radius:12px;border:1.5px dashed var(--line);background:none;color:var(--acc);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px}
+#shb select,#shb .camin{width:100%;height:44px;margin-top:8px;padding:0 12px;box-sizing:border-box;border-radius:10px;border:1px solid var(--line);background:var(--field,var(--card));color:var(--text);font-size:14px}
+.campr{text-align:center;padding:10px 0 4px}
+.campr .hnum{margin:2px 0}
+.cambox{margin-top:6px;padding:10px 12px;border-radius:10px;background:var(--field,var(--card));font-size:13px;line-height:1.5}
+.camwarn{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--accbg);color:var(--acc);font-size:12.5px;line-height:1.6}
+.camstop{width:100%;margin-top:8px;height:42px;background:none;color:var(--sub);border:0}
+.camdrop{margin-top:6px;font-size:11.5px;color:var(--acc)}
+.camspin{width:34px;height:34px;margin:26px auto 14px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--acc);animation:camrot 1s linear infinite}
+@keyframes camrot{to{transform:rotate(360deg)}}
+
+/* 利益表（2026/11/13）：ネテルマニのカレンダーと同じ形・色はハコペンのまま */
+:root{--sun:#C62F26;--sat:#2B4E8C;--up:#0a7d5a;--upbg:rgba(10,125,90,.10)}
+@media (prefers-color-scheme:dark){:root{--sun:#FF7A72;--sat:#8FB2EE;--up:#3ddc97;--upbg:rgba(61,220,151,.14)}}
+.money .up{color:var(--up)}.money .dn{color:var(--red)}
+.mtop{display:flex;align-items:center;gap:10px;margin:2px 0 2px;flex:none}
+.mseg{flex:1;display:flex}
+.mseg button{flex:1;min-height:0;height:32px;font-size:13px}
+.icb.sm{width:40px;height:40px;margin:0}.icb.sm svg{width:19px;height:19px}
+.calhead{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:52px;flex:none}
+.mnav{display:flex;align-items:center}
+.mnav .nb{width:36px;height:36px;min-height:0;padding:0;border-radius:50%;background:none;color:var(--text);display:grid;place-items:center}
+.mlabel{display:flex;flex-direction:column;align-items:center;min-width:64px;line-height:1.15}
+.mlabel small{font-size:11px;color:var(--sub)}.mlabel b{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.todaybtn{min-height:0;height:28px;padding:0 10px;font-size:12px;font-weight:500;background:var(--field,var(--card));color:var(--text);border-radius:8px}
+.msum{justify-self:end;display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;font-variant-numeric:tabular-nums;min-width:0}
+.msum b{font-size:17px;font-weight:700;white-space:nowrap}.msum span{font-size:10.5px;color:var(--sub);white-space:nowrap}
+.mstrip{display:flex;justify-content:space-between;gap:6px;font-size:11px;color:var(--sub);padding:0 2px 6px;font-variant-numeric:tabular-nums;flex:none}
+.mstrip b{color:var(--text);font-weight:600;margin-left:4px}
+.mstrip button{min-height:0;height:auto;padding:4px 6px;margin:-4px -6px;background:none;color:var(--sub);font-size:11px;font-weight:400;border-radius:8px;display:inline-flex;align-items:center;gap:1px}
+.mstrip button svg{opacity:.6;margin-left:1px}.mstrip button .dn{color:var(--red)}
+.cl1{display:flex;align-items:center;gap:8px}
+.home.money{height:auto;margin:0 -2px;padding:0}
+.mst2{flex-direction:column;align-items:flex-start;gap:2px}
+.icb.hprint{margin:0;flex:none}
+.exm{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);padding:12px 0 4px;border-top:1px solid var(--line)}.exm:first-child{border-top:0;padding-top:2px}
+.exr .nm{cursor:pointer}
+button.exdel{min-height:0;width:34px;height:34px;padding:0;margin-left:2px;border-radius:50%;background:var(--redbg);color:var(--red);display:grid;place-items:center;flex:none}
+button.msum{min-height:0;height:auto;padding:4px 6px;margin:-4px -6px;background:none;color:inherit;border-radius:10px;font-weight:400}
+.msum b{display:inline-flex;align-items:center;gap:2px}.msum b svg{opacity:.55}
+.etag.sale{background:var(--upbg);color:var(--up)}.etag.buy{background:var(--field,var(--card));color:var(--sub)}
+.trr.off .pp{color:var(--sub)}
+.wdrow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));font-size:11px;color:var(--sub);text-align:center;padding:6px 0 4px;border-bottom:1px solid var(--line);flex:none}
+.wdrow .sun{color:var(--sun)}.wdrow .sat{color:var(--sat)}
+.calbody{flex:1;min-height:0;overflow:hidden}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat(6,minmax(0,1fr));height:100%}
+.cal .cell{min-height:0;min-width:0;height:auto;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:4px 1px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--text);font-weight:400}
+.cal .cell:active{transform:none;background:var(--field,var(--card))}
+.cal .cell .num{font-size:13px;width:24px;height:24px;line-height:24px;border-radius:12px;font-variant-numeric:tabular-nums;flex:none}
+.cal .cell.out .num{opacity:.3}
+.cal .cell.today .num{background:var(--acc);color:var(--onacc);font-weight:600}
+.cal .cell .amt{font-size:9px;font-weight:600;letter-spacing:-.05em;font-variant-numeric:tabular-nums;white-space:nowrap;padding:1px 3px;border-radius:4px;max-width:100%;overflow:hidden}
+.cal .cell.pos .amt{color:var(--up);background:var(--upbg)}.cal .cell.neg .amt{color:var(--red);background:var(--redbg)}
+.cal .cell.est .amt{background:none;outline:1px dashed currentColor;outline-offset:-1px}
+.cal.jumped .cell.today .num{animation:tpop .7s .12s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes tpop{0%{transform:scale(.4);box-shadow:0 0 0 0 var(--acc)}55%{transform:scale(1.25);box-shadow:0 0 0 8px rgba(91,200,255,0)}100%{transform:none}}
+@keyframes mslideR{from{transform:translateX(100%)}}@keyframes mslideL{from{transform:translateX(-100%)}}
+.cal.a-next,.money .a-next{animation:mslideR .18s cubic-bezier(.2,.8,.2,1)}.cal.a-prev{animation:mslideL .18s cubic-bezier(.2,.8,.2,1)}
+.dtot{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;margin:2px 0 6px}
+.anap,.anat{display:flex;gap:6px;flex:none;align-items:center}
+.anap{margin:0 0 8px}.anat{overflow-x:auto;scrollbar-width:none;margin-bottom:8px}.anat::-webkit-scrollbar{display:none}
+.anap button,.anat button{min-height:0;height:30px;padding:0 13px;font-size:12px;font-weight:500;background:var(--field,var(--card));color:var(--text);border-radius:999px;white-space:nowrap}
+.anap button.on,.anat button.on{background:var(--acc);color:var(--onacc);font-weight:600}
+.astat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:8px;flex:none}
+.astat div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:7px 10px;min-width:0}
+.astat span{display:block;font-size:10.5px;color:var(--sub)}.astat b{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.achart{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px 6px;flex:none}
+.axl{display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:4px}
+.arank{flex:1;min-height:0;overflow:hidden;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 14px 4px;margin-top:8px;display:flex;flex-direction:column}
+.arh{display:flex;justify-content:space-between;align-items:baseline}
+.arl{min-height:0}
+button.armore{flex:none;min-height:0;height:34px;margin:2px -4px 4px;background:none;color:var(--acc);font-weight:600;font-size:13px}
+.money{overflow:hidden;touch-action:pan-x}
+.arh{font-size:12px;font-weight:600;color:var(--sub);margin-bottom:2px}
+.arank .trr .s{flex:none;font-size:11px}
+</style>
+</head>
+<body>
+<div id="scroll"><main id="app"><div class="empty">読み込み中…</div></main></div>
+<button id="camfab" aria-label="カメラ出品" onclick="camStart()"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+<input id="camin" type="file" accept="image/*" capture="environment" hidden onchange="camAdd(this.files);this.value=''">
+<input id="camlib" type="file" accept="image/*" multiple hidden onchange="camAdd(this.files);this.value=''">
+<nav id="nav" class="hide">
+  <a href="#home" data-t="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>ホーム<span class="badge hide" id="b-home"></span></a>
+  <a href="#chat" data-t="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18V6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H8l-4 4z"/></svg>トーク<span class="badge hide" id="b-chat"></span></a>
+  <a href="#stock" data-t="stock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10"/></svg>在庫管理</a>
+  <a href="#money" data-t="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>収支表</a>
+  <a href="#settings" data-t="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>設定</a>
+</nav>
+<div id="pbar"></div><div id="ptr"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 12a8 8 0 11-2.3-5.7M20 4v4h-4"/></svg></div>
+<div class="toast" id="toast"></div>
+<div id="sheet" onclick="if(event.target===this)sheetClose()"><div id="shb"></div></div>
+<div id="dock"></div>
+<div id="topcover"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const br = s => esc(s).replace(/。(?!$)/g, "。<br>");
+const yen = v => { const n = Number(String(v ?? "").replace(/[^\d.\-]/g, "")); return isFinite(n) ? n : 0; };
+const fmt = n => (n < 0 ? "−" : "") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
+const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
+function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
+
+// ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
+const VERSION = "2026-11-14d";
+const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
+const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
+const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
+async function post(body) {
+  const r = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function call(action, payload = {}) {
+  const d = await post({ action, payload, session: ss.get("session") });
+  if (d.login) { ss.set("session", null); location.hash = "settings"; throw new Error("ログインが切れました。設定タブからログインしてください"); }
+  if (d.error) throw new Error(d.error);
+  return d;
+}
+async function onGoogle(res) {
+  try {
+    const d = await post({ action: "login", idToken: res.credential });
+    if (d.error) throw new Error(d.error);
+    ss.set("session", d.session); ss.set("session_at", new Date().toLocaleDateString("ja-JP"));
+    toast("ログインしました"); location.hash = "home"; render(true);
+  } catch (e) { toast(e.message); }
+}
+async function testPrint() {
+  try { await call("tab_set", { name: "売上", cells: [[4, 28, true]] }); toast("5分以内にMacで印刷します"); } catch (e) { toast(e.message); }
+}
+async function logout() {
+  try { await post({ action: "logout", session: ss.get("session") }); } catch (e) {}
+  ss.set("session", null); Object.keys(cache).forEach(k => { delete cache[k]; ss.set("c:" + k, null); }); toast("ログアウトしました"); render();
+}
+let gInit = false;
+function googleButton(id) {
+  const tryIt = () => {
+    if (!(window.google && google.accounts && google.accounts.id)) return setTimeout(tryIt, 300);
+    const el = document.getElementById(id); if (!el || el.dataset.done) return;
+    if (!gInit) { google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onGoogle, ux_mode: "popup" }); gInit = true; }
+    el.dataset.done = "1";
+    google.accounts.id.renderButton(el, { theme: "outline", size: "large", shape: "pill", text: "signin_with", locale: "ja", width: 260 });
+  };
+  tryIt();
+}
+function labelCard() {
+  const v = (cache["売上"] && cache["売上"].v) || [], g = (r, col) => Number(String(c(v[r - 1], col)).trim() || 0);
+  const ud = g(3, 26), lr = g(4, 26), pos = g(3, 28) || 1;
+  return `<div class="card"><div class="t">ラベルの印刷</div><div class="s" style="margin-bottom:12px">シールの位置がずれたら、ここで直します。<br>単位はmmです。</div>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><span>縦（下へ＋）</span><div class="stepper"><button class="sub" onclick="nudge(3,26,-1)">−</button><b id="v3_26">${ud}</b><button class="sub" onclick="nudge(3,26,1)">＋</button></div></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><span>横（右へ＋）</span><div class="stepper"><button class="sub" onclick="nudge(4,26,-1)">−</button><b id="v4_26">${lr}</b><button class="sub" onclick="nudge(4,26,1)">＋</button></div></div>
+    <div class="s" style="margin-bottom:6px">次に貼るシールの位置</div>
+    <div class="seg">${[1, 2, 3, 4].map(n => `<button class="${n === pos ? "on" : ""}" onclick="setPos(${n},this)">${n}</button>`).join("")}</div>
+    <button class="sub" style="width:100%;margin-top:14px" onclick="testPrint()">テスト印刷（位置の確認用）</button></div>`;
+}
+async function nudge(r, col, d) {
+  const e = $(`#v${r}_${col}`), n = Number(e.textContent) + d; e.textContent = n; e.animate([{ transform: "scale(1.3)" }, { transform: "none" }], 250);
+  try { await setCells("売上", [[r, col, n]]); } catch (er) { toast(er.message); }
+}
+async function setPos(n, b) {
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
+  try { await setCells("売上", [[3, 28, n]]); toast(`次は${n}番目のシールに印刷します`); } catch (er) { toast(er.message); }
+}
+async function viewSettings() {
+  const on = !!ss.get("session");
+  // 2026/11/13 設定を軽く：読み込みを待たずにすぐ出す。前回のデータが無いシートは裏で読んで、届いたら描き直す
+  if (on) { ["通知", "買い手メッセージ", "除外者リスト", "経費"].forEach(n => (cache[n] ? tab(n) : refreshBg(n)).catch(() => {})); if (bell == null) bellState(); }
+  return `<h1>設定</h1>
+  ${on ? notifyCard() + expCard() + hiddenCard() + blockCard() : ""}
+  <div class="card">${on ? `<div class="t">ログイン中</div><div class="s">${esc(ss.get("session_at") || "")}にログイン。<br>30日たつと、もう一度ログインが必要です。</div>
+    <div style="margin-top:12px"><button class="sub" onclick="logout()">ログアウト</button></div>`
+    : `<div class="t">Googleでログイン</div><div class="s" style="margin-bottom:12px">管理表の持ち主のアカウントでログインしてください。<br>ほかのアカウントでは使えません。</div><div id="gbtn" style="width:260px;height:44px;overflow:hidden"></div>`}</div>
+  ${on ? labelCard() : ""}
+  <div class="s" style="text-align:center;margin-top:16px">ハコペン ${VERSION}</div>`;
+}
+const cache = {};
+["売上", "買い手メッセージ", "無在庫商品リスト", "月別収支", "ジャンク品在庫", "通知", "カメラ出品", "経費", "除外者リスト"].forEach(n => { try { const x = JSON.parse(ss.get("c:" + n) || "null"); if (x) cache[n] = x; } catch (e) {} });
+const pending = {};
+// 2026/11/12 読み込みを軽く：使う列までだけ読む・前回と同じなら中身は来ない（etag）
+// 無在庫商品リストはほぼ全行が出品中で、トークの商品名さがしにも使うので行は絞らない
+const READ_OPT = {
+  "売上": { cols: 32 },
+  "買い手メッセージ": { cols: 12 },
+  "無在庫商品リスト": { cols: 23 },
+};
+// 2026/11/14 本人「重い」：同時に頼まれた読み込みは、少しだけ待って1回の通信にまとめる
+// （シートごとに別々に同時に呼ぶとGoogle側で渋滞し、1件8〜9秒かかっていた。まとめると1回1〜2秒）
+const bq = { list: [], t: null };
+function tabReq(name) {
+  const hit = bq.list.find(x => x.name === name);
+  if (hit) return hit.p;
+  let ok, ng; const p = new Promise((a, b) => { ok = a; ng = b; });
+  const old = cache[name];
+  bq.list.push({ name, q: Object.assign({ name, etag: old && old.etag }, READ_OPT[name] || {}), p, ok, ng });
+  if (!bq.t) bq.t = setTimeout(async () => {
+    const list = bq.list; bq.list = []; bq.t = null;
+    try {
+      const res = await call("tabs_get", { list: list.map(x => x.q) });
+      list.forEach(x => { const r = (res.tabs || {})[x.name]; r && !r.error ? x.ok(r) : x.ng(new Error((r && r.error) || "読めませんでした")); });
+    } catch (e) {
+      if (!/知らない操作/.test(e.message)) return list.forEach(x => x.ng(e));
+      list.forEach(x => call("tab_get", x.q).then(x.ok, x.ng));   // 古い輸出帳のときは1件ずつ
+    }
+  }, 30);
+  return p;
+}
+function applyTab(name, res) {
+  const old = cache[name];
+  if (res.same && old) { old.at = Date.now(); ss.set("c:" + name, JSON.stringify(old)); return false; }
+  const v = res.values || [];
+  cache[name] = { at: Date.now(), v, etag: res.etag };
+  ss.set("c:" + name, JSON.stringify(cache[name]));
+  return !old || JSON.stringify(old.v) !== JSON.stringify(v);
+}
+async function fetchTab(name) {
+  const old = cache[name];
+  const res = await tabReq(name);
+  if (res.same && old) { old.at = Date.now(); ss.set("c:" + name, JSON.stringify(old)); return false; }
+  const v = res.values || [];
+  cache[name] = { at: Date.now(), v, etag: res.etag };
+  ss.set("c:" + name, JSON.stringify(cache[name]));
+  return !old || JSON.stringify(old.v) !== JSON.stringify(v);
+}
+function busyTyping() { const a = document.activeElement; return a && /INPUT|TEXTAREA/.test(a.tagName); }
+const writing = {};
+function refreshBg(name) {
+  if (writing[name] > 0) return Promise.resolve();
+  if (pending[name]) return pending[name];
+  return pending[name] = fetchTab(name).then(ch => { if (ch && !busyTyping() && !$("#sheet.on")) render(false); }).catch(() => {}).finally(() => delete pending[name]);
+}
+async function tab(name, fresh) {   // 前回のデータがあればすぐ返し、古ければ裏で最新にして描き直す
+  if (!fresh && cache[name]) { if (Date.now() - cache[name].at > 20000) refreshBg(name); return cache[name].v; }
+  await fetchTab(name); return cache[name].v;
+}
+function setLocal(name, cells) {   // 手元のデータだけ書き換える（画面にすぐ出す）
+  const v = cache[name] && cache[name].v;
+  if (v) cells.forEach(([r, col, val]) => { while (v.length < r) v.push([]); const row = v[r - 1]; while (row.length < col) row.push(""); row[col - 1] = val === true ? "TRUE" : val === false ? "FALSE" : String(val); });
+}
+function fastSet(name, cells, msg) {   // 2026/11/12 先に画面を変えて、管理表への書き込みは裏で（待たせない）
+  setLocal(name, cells); if (msg) toast(msg); render(false, true);
+  writing[name] = (writing[name] || 0) + 1;   // 書き込み中は裏の読み直しで古い中身に戻らないように
+  return call("tab_set", { name, cells }).then(() => { if (cache[name]) { cache[name].at = 0; ss.set("c:" + name, JSON.stringify(cache[name])); } })
+    .catch(e => toast("保存できませんでした：" + e.message)).finally(() => { writing[name]--; });
+}
+async function setCells(name, cells) {
+  await call("tab_set", { name, cells });
+  setLocal(name, cells);   // 手元のデータも書き換えて、すぐ画面に出す
+  if (cache[name]) cache[name].at = 0;
+  refreshBg(name);
+}
+
+// ---- 列（1から数える） ----
+const S = { head: 5, date: 1, model: 2, title: 3, item: 4, src: 5, price: 6, profit: 13, shipped: 15, rank: 23, arrived: 24, weight: 25, packed: 26, status: 27, track: 28, pickup: 29, reprint: 30, deliv: 31, pickwant: 32 };
+const B = { when: 1, title: 2, item: 3, buyer: 4, qen: 5, qja: 6, ren: 7, rja: 8, send: 9, state: 10, id: 11, read: 12 };
+const L = { src: 1, url: 2, item: 3, state: 4, title: 8, rank: 9, cost: 10, profit: 12, bought: 16, watch: 17, days: 21, note: 22, why: 23 };
+const c = (r, i) => (r && r[i - 1] !== undefined ? r[i - 1] : "");
+
+async function load(fresh) {
+  const [sales, msgs, list] = await Promise.all([tab("売上", fresh), tab("買い手メッセージ", fresh), tab("無在庫商品リスト", fresh)]);
+  const ship = [], doing = [];
+  sales.forEach((r, i) => {
+    if (i + 1 <= S.head || !String(c(r, S.date)).trim()) return;
+    const st = String(c(r, S.status)).trim();
+    if (String(c(r, S.shipped)).trim() || st.startsWith("済") || st.startsWith("手作業")) return;
+    (truthy(c(r, S.packed)) ? doing : ship).push({ row: i + 1, r, st });
+  });
+  const ask = msgs.map((r, i) => ({ row: i + 1, r })).filter(x => x.row > 1 && String(c(x.r, B.when)).trim() && !truthy(c(x.r, B.send)) && !String(c(x.r, B.state)).includes("送信済み"));
+  const unread = msgs.filter((r, i) => i > 0 && String(c(r, B.when)).trim() && !String(c(r, B.state)).startsWith("削除") && !isRead(r)).length;
+  const buy = list.map((r, i) => ({ row: i + 1, r })).filter(x => x.row > 1 && String(c(x.r, L.state)) === "要仕入れ" && !truthy(c(x.r, L.bought)));
+  const n = ship.length + buy.length;
+  badge("b-home", n); badge("b-chat", unread);
+  return { sales, msgs, list, ship, doing, ask, buy };
+}
+const replied = r => /送信済み|返信済み|返信不要/.test(String(c(r, B.state)));
+const isRead = r => String(c(r, B.read)).includes("非表示") || !String(c(r, B.read)).includes("未読") && (truthy(c(r, B.read)) || String(c(r, B.read)).includes("既読") || replied(r));
+function badge(id, n){ if (id === "b-chat" && navigator.setAppBadge) { try { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } catch (e) {} }
+  const e=$("#"+id); e.textContent=n; e.classList.toggle("hide", !n); }
+
+// ---- ホーム（やること） ----
+const STEPS = ["割り当て", "追跡番号", "印刷", "集荷", "発送"];
+function stepOf(st) {
+  if (st.startsWith("済")) return 5;
+  if (/集荷予約済|集荷待ち/.test(st)) return 3;
+  if (/ラベル印刷済/.test(st)) return 3;
+  if (/追跡番号取得/.test(st)) return 2;
+  if (/割り当て済/.test(st)) return 1;
+  return 0;
+}
+function monthProfit() {
+  const m = cache["月別収支"] && cache["月別収支"].v; if (!m || !m.length) return null;
+  const now = new Date(), key = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+  const head = m[0] || [], col = name => head.findIndex(x => String(x).startsWith(name)) + 1;
+  const cur = m.find(r => r[0] === key); if (!cur) return { v: 0, n: 0 };
+  return { v: yen(c(cur, col("本当の利益"))), n: c(cur, col("売れた件数")) || 0 };
+}
+async function reprint(row) {
+  await setCells("売上", [[row, S.reprint, true]]);
+  toast("5分以内にMacで印刷し直します"); render(true);
+}
+
+// ---- ホーム（路線図：仕入れ→到着待ち→梱包→発送中→完了。左右スワイプで段を移動） ----
+const STAGES = [
+  { k: "buy", n: "仕入れ", me: true, icon: "M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20a1 1 0 100-2 1 1 0 000 2zM18 20a1 1 0 100-2 1 1 0 000 2z" },
+  { k: "wait", n: "到着待ち", icon: "M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z" },
+  { k: "pack", n: "梱包", me: true, icon: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10" },
+  { k: "ship", n: "発送中", icon: "M3 6h11v10H3zM14 9h4l3 3v4h-7M7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z" },
+  { k: "done", n: "完了", icon: "M5 12l5 5 9-10" },
+];
+let stageNow = null;
+const svgI = d => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+function homeData(d) {
+  const buyItems = new Set(d.buy.map(x => String(c(x.r, L.item)).trim()));
+  const wait = [], pack = [], done = [], sent = [];
+  const now = new Date(), ym = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+  d.sales.forEach((r, i) => {
+    if (i + 1 <= S.head || !String(c(r, S.date)).trim()) return;
+    const st = String(c(r, S.status)).trim(), sh = String(c(r, S.shipped)).trim();
+    if (sh || st.startsWith("済") || st.startsWith("手作業")) {   // 11/12 本人：発送したら「発送中」、届いたら「完了」
+      const dv = String(c(r, S.deliv)).trim();
+      if (!dv) sent.push({ row: i + 1, r, st: "配達待ち", sent: true });
+      else if (dv.replace(/-/g, "/").startsWith(ym)) done.push({ row: i + 1, r, st });
+      return; }
+    if (truthy(c(r, S.packed))) return;
+    if (buyItems.has(String(c(r, S.item)).trim())) return;
+    (String(c(r, S.arrived)).trim() ? pack : wait).push({ row: i + 1, r });
+  });
+  return { sales: d.sales, buy: d.buy, wait, pack, ship: d.doing.concat(sent.reverse()), done: done.reverse() };
+}
+const cardIn = i => `style="animation-delay:${Math.min(i, 6) * 45}ms"`;
+function more(list, f, k) {   // 3件より多いときは折りたたむ
+  if (list.length <= 3) return list.map(f).join("");
+  return list.slice(0, 3).map(f).join("") + `<details class="more"><summary>ほか${list.length - 3}件を見る</summary>${list.slice(3).map((x, i) => f(x, i + 3)).join("")}</details>`;
+}
+// 2026/11/13 梱包の重さ：同じ機種で前に入れた重さ（一番新しい行）を最初から入れておく
+const mkey = v => String(v || "").toUpperCase().replace(/[\s\-]/g, "");
+function lastW(sales, x) {
+  const k = mkey(c(x.r, S.model)); if (!k || !sales) return "";
+  for (let i = sales.length - 1; i >= S.head; i--) { const r = sales[i];
+    if (i + 1 !== x.row && mkey(c(r, S.model)) === k && Number(c(r, S.weight)) > 0) return String(c(r, S.weight)); }
+  return "";
+}
+function stagePage(k, h) {
+  const nm = x => esc(c(x.r, S.model) || c(x.r, S.title));
+  if (k === "buy") return h.buy.length ? more(h.buy, (x, i) => `<div class="card ci" ${cardIn(i)} id="cd${x.row}">
+    <div class="t">${esc(c(x.r, L.title))}</div><div class="s">${esc(c(x.r, L.src))} ${fmt(yen(c(x.r, L.cost)))}・利益 ${fmt(yen(c(x.r, L.profit)))}</div>
+    <div class="row act"><a href="${esc(c(x.r, L.url))}" target="_blank" rel="noopener noreferrer"><button class="sub">仕入元を開く</button></a><button onclick="act(${x.row},()=>bought(${x.row}))">仕入れた</button></div></div>`)
+    : emptyStage("仕入れる商品はありません。", "売れたらここに出ます。");
+  if (k === "wait") return h.wait.length ? more(h.wait, (x, i) => `<div class="card ci" ${cardIn(i)} id="cd${x.row}">
+    <div class="t">${nm(x)}</div><div class="s">売れた日 ${esc(c(x.r, S.date))}・${pf(x.r)}</div>
+    <div class="row act">${/^https?:/.test(String(c(x.r, S.src))) ? `<a href="${esc(c(x.r, S.src))}" target="_blank" rel="noopener noreferrer"><button class="sub">取引を見る</button></a>` : ""}<button onclick="act(${x.row},()=>arrived(${x.row}))">届いた</button></div></div>`)
+    : emptyStage("届くのを待っている商品はありません。", "");
+  if (k === "pack") return h.pack.length ? more(h.pack, (x, i) => `<div class="card ci" ${cardIn(i)} id="cd${x.row}">
+    <div class="t">${nm(x)}</div><div class="s">届いた日 ${esc(c(x.r, S.arrived))}・状態 ${esc(c(x.r, S.rank) || "−")}・${pf(x.r)}</div>
+    <button class="pkrow" onclick="pickSheet(${x.row})">${svgI("M3 6h11v10H3zM14 9h4l3 3v4h-7M7 19a2 2 0 100-4 2 2 0 000 4zM17 19a2 2 0 100-4 2 2 0 000 4z")}<span class="grow">FedEx集荷 ${esc(pickLabel(c(x.r, S.pickwant)))}</span><span class="s">変える</span></button>
+    <div class="row act"><input id="w${x.row}" type="number" inputmode="numeric" placeholder="重さ（g）" value="${esc(c(x.r, S.weight) || lastW(h.sales, x))}"><button onclick="packed(${x.row})">梱包済み</button></div>${!c(x.r, S.weight) && lastW(h.sales, x) ? `<div class="s">同じ機種の前回の重さを入れました。<br>違うときは直してください。</div>` : ""}</div>`)
+    : emptyStage("梱包する商品はありません。", "届いたらここに出ます。");
+  if (k === "ship") return h.ship.length ? more(h.ship, (x, i) => {
+    const st = x.st || "順番待ち", cls = st.startsWith("止まった") ? "red" : st.startsWith("確認待ち") ? "warn" : "ok", n = x.sent ? 5 : stepOf(st);
+    return `<div class="card ci" ${cardIn(i)} id="cd${x.row}"><div class="row"><div class="grow"><div class="t">${nm(x)}</div><div class="s">${pf(x.r)}</div></div><span class="tag ${cls}">${esc(st.replace(/（.*?）/, ""))}</span></div>
+    <div class="steps">${STEPS.map((s2, j) => `<div class="st ${j < n ? "done" : j === n ? "now" : ""}"><i></i><span>${s2}</span></div>`).join("")}</div>
+    ${c(x.r, S.pickup) ? `<div class="s">集荷 ${esc(c(x.r, S.pickup))}</div>` : ""}${c(x.r, S.track) ? `<div class="s">追跡番号 ${esc(c(x.r, S.track))}</div>` : ""}
+    ${st.startsWith("確認待ち") ? `<div class="row act"><button onclick="goLive(${x.row})">発送を進める</button></div>` : ""}
+    ${x.sent ? `<div class="s">${c(x.r, S.shipped) ? "発送日 " + esc(c(x.r, S.shipped)) + "・" : ""}届いたら「完了」に移ります</div>` : ""}
+    ${n >= 3 && !x.sent ? `<div class="row act">${truthy(c(x.r, S.reprint)) ? `<span class="s">5分以内に印刷します</span>` : `<button class="sub" onclick="reprint(${x.row})">ラベルを印刷し直す</button>`}</div>` : ""}</div>`; })
+    : emptyStage("発送の途中の商品はありません。", "梱包済みにすると、ここで自動で進みます。");
+  return h.done.length ? more(h.done, (x, i) => `<div class="card ci" ${cardIn(i)}><div class="row"><div class="grow"><div class="t">${nm(x)}</div>
+    <div class="s">届いた日 ${esc(c(x.r, S.deliv) || "−")}・${pf(x.r)}</div></div><span class="ok-mark">${svgI("M5 12l5 5 9-10")}</span></div></div>`)
+    : emptyStage("今月届いた商品はまだありません。", "");
+}
+const emptyStage = (a, b) => `<div class="empty ci">${a}${b ? "<br>" + b : ""}</div>`;
+async function viewTodo(fresh) {
+  const d = await load(fresh);
+  await tab("月別収支", fresh).catch(() => {});
+  const h = homeData(d), mp = monthProfit() || { v: 0, n: 0 };
+  const act = d.list.filter((r, i) => i > 0 && String(c(r, L.state)) === "active").length;
+  if (stageNow == null) stageNow = h.buy.length ? 0 : h.pack.length ? 2 : h.ship.length ? 3 : h.wait.length ? 1 : 0;
+  badge("b-home", h.buy.length + h.pack.length);
+  return `<div class="home"><div class="hhead">
+    <div class="grow" onclick="location.hash='money'"><div class="s">今月の本当の利益</div><div class="hnum ${mp.v < 0 ? "neg" : ""}" data-to="${Math.round(mp.v)}">${fmt(mp.v)}</div>
+      <div class="s">売れた ${esc(mp.n)}件・出品中 ${act}件</div></div>
+    <button class="icb sm hprint" onclick="printSheet()" aria-label="印刷・書き出し">${PRINT_ICON}</button><button class="addx" onclick="expenseSheet()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>経費</button></div>
+  <div class="route">${STAGES.map((g, i) => `<button class="stop ${g.me ? "me" : ""} ${i === stageNow ? "on" : ""}" data-k="${g.k}" onclick="goStage(${i})"><span class="dotc">${h[g.k].length ? `<b>${h[g.k].length}</b>` : svgI(g.icon)}</span><span class="sn">${g.n}</span></button>`).join("")}
+    <i class="rline"></i><i class="rbar" id="rbar"></i></div>
+  <div class="legend"><span class="lg me"></span>あなたの作業<span class="lg"></span>自動で進む</div>
+  <div class="rswipe" id="rswipe">${STAGES.map(g => `<section class="rp" data-k="${g.k}"><div class="rph">${g.n}<span class="s">${h[g.k].length}件</span></div>${stagePage(g.k, h)}</section>`).join("")}</div></div>`;
+}
+function goStage(i, instant) {
+  const w = $("#rswipe"); if (!w) return;
+  w.scrollTo({ left: i * w.clientWidth, behavior: instant ? "auto" : "smooth" });
+  setStage(i);
+}
+function setStage(i) {
+  stageNow = i;
+  document.querySelectorAll(".stop").forEach((e, j) => e.classList.toggle("on", j === i));
+  const st = document.querySelectorAll(".stop")[i], bar = $("#rbar");
+  if (st && bar) { bar.style.background = `var(--c-${STAGES[i].k})`; bar.style.width = st.offsetWidth * .5 + "px"; bar.style.transform = `translateX(${st.offsetLeft + st.offsetWidth * .25}px)`; }
+}
+function onStageScroll() {
+  const w = $("#rswipe"); if (!w) return;
+  const i = Math.round(w.scrollLeft / w.clientWidth);
+  if (i !== stageNow) setStage(i);
+}
+function countUp() {
+  document.querySelectorAll("[data-to]").forEach(e => {
+    const to = Number(e.dataset.to), from = Number(e.dataset.from || 0), t0 = performance.now();
+    if (from === to) return;
+    const step = t => { const k = Math.min(1, (t - t0) / 700), v = from + (to - from) * (1 - Math.pow(1 - k, 3)); e.textContent = fmt(v); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step); countUp.last = to;
+  });
+}
+async function act(row, fn) {   // カードを右へ流してから処理
+  const e = $("#cd" + row); if (e) e.classList.add("out");
+  try { await fn(); } catch (er) { if (e) e.classList.remove("out"); toast(er.message); }
+}
+async function arrived(row) {
+  const d = new Date(), t = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+  await setCells("売上", [[row, S.arrived, t]]);
+  toast("梱包の段に移しました"); render(false);
+}
+async function goLive(row) {
+  if (!confirm("発送を進めますか？\n送料がかかり、ラベル印刷・集荷予約まで自動で進みます。")) return;
+  await act(row, async () => { await setCells("売上", [[row, S.status, "本番で進める"]]); toast("5分以内にMacで進めます"); render(false); });
+}
+// ---- FedExの集荷の日時（売上AF列。空なら翌営業日15:00〜18:00）2026/11/12 ----
+const WD = "日月火水木金土";
+const PICK_TIMES = [["09:00", "12:00", "午前 9〜12時"], ["12:00", "15:00", "12〜15時"], ["15:00", "18:00", "15〜18時"]];
+const ymdS = d => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+function pickDays() {   // 選べる日：今日から土日を除く5日（今日は午前の枠が過ぎていれば後の枠だけ）
+  const out = [], d = new Date(); d.setHours(0, 0, 0, 0);
+  for (let i = 0; out.length < 5 && i < 14; i++, d.setDate(d.getDate() + 1)) if (d.getDay() % 6) out.push(new Date(d));
+  return out;
+}
+function pickLabel(v) {
+  const m = String(v || "").match(/(\d{4})\D(\d{1,2})\D(\d{1,2})\D+(\d{1,2}):\d{2}\D+(\d{1,2}):\d{2}/);
+  if (!m) { const d = pickDays().find(x => x > new Date()) || pickDays()[0]; return `${d.getMonth() + 1}/${d.getDate()}（${WD[d.getDay()]}）15〜18時・おまかせ`; }
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return `${d.getMonth() + 1}/${d.getDate()}（${WD[d.getDay()]}）${+m[4]}〜${+m[5]}時`;
+}
+let pk = { day: "", t: 2 };
+function pickSheet(row) {
+  const v = cache["売上"].v[row - 1] || [], cur = String(c(v, S.pickwant));
+  const m = cur.match(/(\d{4}\D\d{1,2}\D\d{1,2})\D+(\d{1,2}):/);
+  pk = { day: m ? m[1].replace(/\D/g, "/") : "", t: m ? Math.max(0, PICK_TIMES.findIndex(t => +t[0].slice(0, 2) === +m[2])) : 2 };
+  const now = new Date(), days = pickDays();
+  if (!pk.day) pk.day = ymdS(days.find(d => d.toDateString() !== now.toDateString()) || days[0]);
+  const ok = (d, t) => d.toDateString() !== now.toDateString() || now.getHours() < +PICK_TIMES[t][0].slice(0, 2) - 1;
+  const draw = () => {
+    const dsel = days.find(d => ymdS(d) === pk.day) || days[0];
+    $("#shb").innerHTML = `<div class="shh"><div class="t">FedExの集荷</div><button class="x" onclick="sheetClose()">閉じる</button></div>
+      <div class="s">集荷に来てもらう日</div><div class="chips">${days.map(d => `<button class="ck pkck ${ymdS(d) === pk.day ? "on" : ""}" ${PICK_TIMES.some((_, t) => ok(d, t)) ? "" : "disabled"} onclick="pk.day='${ymdS(d)}';pickSheet.draw()">${d.toDateString() === now.toDateString() ? "今日" : `${d.getMonth() + 1}/${d.getDate()}`}（${WD[d.getDay()]}）</button>`).join("")}</div>
+      <div class="s" style="margin-top:12px">時間</div><div class="chips">${PICK_TIMES.map((t, i) => `<button class="ck pkck ${i === pk.t ? "on" : ""}" ${ok(dsel, i) ? "" : "disabled"} onclick="pk.t=${i};pickSheet.draw()">${t[2]}</button>`).join("")}</div>
+      <div class="s" style="margin-top:12px">梱包済みにしたあと、この日時で集荷を予約します。<br>予約したあとは、ここでは変えられません。</div>
+      <div class="row" style="gap:8px;margin-top:14px"><button class="sub grow" onclick="savePick(${row},true)">おまかせに戻す</button><button class="grow" onclick="savePick(${row})">この日時にする</button></div>`;
+  };
+  pickSheet.draw = draw;
+  sheetOpen(""); draw();
+}
+function savePick(row, reset) {
+  const t = PICK_TIMES[pk.t], v = reset ? "" : `${pk.day} ${t[0]}〜${t[1]}`;
+  sheetClose(); fastSet("売上", [[row, S.pickwant, v]], reset ? "集荷はおまかせ（翌営業日15〜18時）にしました" : `集荷を ${pickLabel(v)} にしました`);
+}
+// ---- 経費の追加 ----
+const EXP_KINDS = ["段ボール", "梱包材", "送料", "仕入れの送料", "文房具", "その他"];
+let expKind = EXP_KINDS[0];
+async function expenseSheet(day) {
+  const d = new Date(), today = day ? String(day).replace(/\//g, "-") : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  sheetOpen(`<div class="shh"><div class="t">経費を追加</div><button class="x" onclick="sheetClose()">閉じる</button></div>
+    <div class="s">何に使った？</div><div class="chips">${EXP_KINDS.map(k => `<button class="ck ${k === expKind ? "on" : ""}" style="--cc:var(--k${EXP_KINDS.indexOf(k)})" onclick="expKind='${k}';document.querySelectorAll('.ck').forEach(e=>e.classList.toggle('on',e.textContent==='${k}'))">${k}</button>`).join("")}</div>
+    <div class="s" style="margin-top:12px">金額（円）</div><input id="ex_amt" type="number" inputmode="numeric" placeholder="1,336" class="bigin">
+    <div class="g2f"><label><span class="s">日付</span><input id="ex_day" type="date" value="${today}"></label><label><span class="s">メモ</span><input id="ex_memo" placeholder="アースダンボール"></label></div>
+    <button class="full" style="width:100%;margin-top:16px;height:46px" onclick="addExpense()">追加する</button>
+    <div class="s" style="margin:18px 0 6px">今月の経費</div><div id="ex_list" class="exl"></div>`);
+  await new Promise(r => setTimeout(r, 330));   // 下から出る動きが終わってから一覧を描く
+  try {
+    const v = await tab("経費"), ym = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const rows = v.slice(5).filter(r => String(r[0] || "").startsWith(ym)).reverse();
+    const tot = rows.reduce((a, r) => a + yen(r[2]), 0);
+    $("#ex_list").innerHTML = rows.length ? rows.slice(0, 6).map(r => `<div class="exr"><div class="grow"><div class="ell">${esc(r[1])}</div><div class="s">${esc(String(r[0]).slice(5))}</div></div><b>${fmt(yen(r[2]))}</b></div>`).join("") + `<div class="dl sum"><span>合計</span><b>${fmt(tot)}</b></div>` : "まだありません。";
+  } catch (e) { $("#ex_list").textContent = "読み込めませんでした。"; }
+}
+async function addExpense() {
+  const amt = Number($("#ex_amt").value), day = ($("#ex_day").value || "").replace(/-/g, "/"), memo = $("#ex_memo").value.trim();
+  if (!(amt > 0)) return toast("金額を入れてください");
+  const v = await tab("経費", true);
+  let n = v.findIndex((r, i) => i >= 5 && !String(r[0] || "").trim()) + 1; if (n < 6) n = v.length + 1;
+  await setCells("経費", [[n, 1, day], [n, 2, expKind], [n, 3, amt], [n, 5, memo || "ハコペンから追加"]]);
+  sheetClose(); toast(`${expKind} ${fmt(amt)} を追加しました`); render(false, true);
+}
+async function packed(row) {
+  const w = Number($("#w" + row).value);
+  if (!(w > 0)) { toast("重さ（g）を入れてください"); return; }
+  await act(row, async () => { await setCells("売上", [[row, S.weight, w], [row, S.packed, true]]); toast("発送中の段に移しました。5分以内に自動で進みます"); render(false); });
+}
+async function bought(row) {
+  await setCells("無在庫商品リスト", [[row, L.bought, true]]);
+  toast("到着待ちの段に移しました"); render(false);
+}
+
+// ---- トーク（LINEのブラック風・自分の文も相手の文も日本語と英語を並べる） ----
+const ini = n => (String(n || "?").trim()[0] || "?").toUpperCase();
+const hm = w => { const m = String(w).match(/(\d{1,2}):(\d{2})/); return m ? `${m[1].padStart(2,"0")}:${m[2]}` : ""; };
+const ymd = w => { const m = String(w).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/); return m ? `${Number(m[2])}月${Number(m[3])}日` : ""; };
+const tnum = w => { const m = String(w).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})\D+(\d{1,2}):(\d{2})/); return m ? +(m[1] + m[2].padStart(2,"0") + m[3].padStart(2,"0") + m[4].padStart(2,"0") + m[5]) : 0; };
+const tOf = x => x.tn ?? (x.tn = tnum(c(x.r, B.when)));   // 並べ替えのたびに日時を読み直さない
+const byTime = (a, b) => (tOf(a) - tOf(b)) || (a.row - b.row);
+const tkey = r => String(c(r, B.buyer)).trim() + "|" + String(c(r, B.item)).trim();
+const pf = r => { const v = yen(c(r, S.profit)); return `<span class="pft ${v < 0 ? "neg" : ""}">利益 ${fmt(v)}</span>`; };
+function profitOf(d, item) {
+  item = String(item || "").trim(); if (!item) return null;
+  const sr = d.sales.find(x => String(c(x, S.item)).trim() === item); if (sr && String(c(sr, S.profit)).trim()) return yen(c(sr, S.profit));
+  const l = d.list.find(x => String(c(x, L.item)).trim() === item); if (l && String(c(l, L.profit)).trim()) return yen(c(l, L.profit));
+  return null;
+}
+function itemName(d, r) {
+  const item = String(c(r, B.item)).trim();
+  const l = item && d.list.find(x => String(c(x, L.item)).trim() === item);
+  if (l && String(c(l, L.title)).trim()) return String(c(l, L.title));
+  const sr = item && d.sales.find(x => String(c(x, S.item)).trim() === item);
+  if (sr && String(c(sr, S.title) || c(sr, S.model)).trim()) return String(c(sr, S.title) || c(sr, S.model));
+  let t = String(c(r, B.title)).replace(/^【購入済み】/, "").replace(/^(Re|RE|Fwd):\s*/g, "");
+  const m = t.match(/sent an? (?:question|message) about (?:item #?\d+[,:]?\s*[-–]?\s*)?(.*)$/i); if (m && m[1].trim()) t = m[1];
+  return t.trim() || "（商品名なし）";
+}
+function links(d, item) {
+  item = String(item || "").trim();
+  const l = d.list.find(r => String(c(r, L.item)).trim() === item);
+  let src = l ? String(c(l, L.url)) : "";
+  if (!/^https?:/.test(src)) { const sr = d.sales.find(r => String(c(r, S.item)).trim() === item); src = sr && /^https?:/.test(String(c(sr, S.src))) ? String(c(sr, S.src)) : ""; }
+  const name = l ? String(c(l, L.src)) : "";
+  return { ebay: item ? `https://www.ebay.com/itm/${encodeURIComponent(item)}` : "", src, name };
+}
+async function viewChat(row, fresh) {
+  const d = await load(fresh);
+  const all = d.msgs.map((r, i) => ({ row: i + 1, r })).filter(x => x.row > 1 && String(c(x.r, B.when)).trim() && !String(c(x.r, B.state)).startsWith("削除")).sort(byTime);
+  if (!row) {
+    const th = {};
+    all.forEach(x => { (th[tkey(x.r)] = th[tkey(x.r)] || []).push(x); });
+    const isHid = t => t.every(x => String(c(x.r, B.read)).includes("非表示"));
+    const every = Object.values(th).sort((a, b) => byTime(b[b.length - 1], a[a.length - 1]));
+    const ts = every.filter(t => hiddenView ? isHid(t) : !isHid(t)), nh = every.filter(isHid).length;
+    sel.list = ts.map(t => t.map(x => x.row));
+    let h = `<div class="lh">${sel.on ? `<button class="hb" onclick="selAll()">${sel.rows.size && sel.rows.size === ts.length ? "選択を解除" : "すべて選択"}</button>`
+      : hiddenView ? `<button class="hb back2" onclick="location.hash='settings'">‹</button>` : ``}
+      <h1>${hiddenView ? "非表示のトーク" : "トーク"}</h1>
+      ${ts.length ? `<button class="hb r" onclick="selToggle()">${sel.on ? "完了" : "選択"}</button>` : `<span></span>`}</div>`;
+    if (!ts.length) return h + `<div class="empty">${hiddenView ? "非表示のトークはありません。<br>トークを左にスワイプするか、右上の「選択」から非表示にできます。" : "買い手からのメッセージはありません。"}</div>`;
+    const pv = hiddenView ? "" : pulledNow(d).map((x, i) => `<div class="lrow pvrow" onclick="pvOpen(${i})"><div class="av">${esc(ini(x.buyer))}</div>
+      <div class="grow"><div class="t">${esc(x.buyer)}</div><div class="s ell">${esc(x.ja || x.en)}</div><div class="s it3"><span class="ell">${esc(x.title)}</span></div></div>
+      <div class="meta"><span class="tm">${esc(hm(x.when) || "")}</span><span class="tm new">取り込み中</span></div></div>`).join("");
+    if (!ts.length && pv) return h + pv;
+    return h + pv + ts.map((t, i) => {
+      const last = t[t.length - 1], un = t.filter(x => !isRead(x.r)).length, key = i;
+      const lastTxt = !String(c(last.r, B.qja) || c(last.r, B.qen)).trim() || truthy(c(last.r, B.send)) || /送信済み|返信済み/.test(String(c(last.r, B.state))) ? "あなた: " + (c(last.r, B.rja) || c(last.r, B.ren)) : (c(last.r, B.qja) || c(last.r, B.qen));
+      const wait = t.some(x => truthy(c(x.r, B.send)) && !replied(x.r)), on = sel.rows.has(key);
+      return `<div class="sw ${sel.on ? "selmode" : ""}" data-un="${un}"><div class="swbg"><button class="sa unr" onclick="swAct(this,'unread')">${hiddenView ? "表示に戻す" : "未読"}</button></div><div class="swdel"><button class="sa hid" onclick="swAct(this,'hide')">${hiddenView ? "表示に戻す" : "非表示"}</button></div><div class="lrow ${on ? "picked" : ""}" data-rows="${t.map(x => x.row).join(",")}" onclick="${sel.on ? `selPick(${key})` : `if(!swiped)location.hash='chat/${last.row}'`}">
+      ${sel.on ? `<span class="ck2 ${on ? "on" : ""}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>` : ""}
+      <div class="av">${esc(ini(c(last.r, B.buyer)))}</div>
+      <div class="grow"><div class="t">${esc(c(last.r, B.buyer))}</div><div class="s ell">${esc(lastTxt)}</div><div class="s it3"><span class="ell">${esc(itemName(d, last.r))}</span></div></div>
+      <div class="meta"><span class="tm">${esc(hm(c(last.r, B.when)) || ymd(c(last.r, B.when)))}</span>${un ? `<span class="unread">${un}</span>` : ""}
+      ${wait ? `<span class="tm">送信待ち</span>` : ""}</div></div></div>`; }).join("")
+      + (sel.on ? `<div class="ibar selbar"><div class="in row"><span class="s grow">${sel.rows.size}件を選択中</span>
+        ${hiddenView ? "" : `<button class="sub" ${sel.rows.size ? "" : "disabled"} onclick="selRead()">既読</button>`}
+        <button class="sub" ${sel.rows.size ? "" : "disabled"} onclick="selHide()">${hiddenView ? "表示に戻す" : "非表示"}</button>
+</div></div>` : "");
+  }
+  const me = d.msgs[row - 1];
+  if (!me || row < 2) return `<div class="rh"><button class="back" onclick="location.hash='chat'">‹</button><div class="t">トーク</div></div><div class="empty">見つかりません（返信が送られて消えた可能性）</div>`;
+  const t = all.filter(x => tkey(x.r) === tkey(me));
+  const lk = links(d, c(me, B.item));
+  const open = t.filter(x => !truthy(c(x.r, B.send)) && !replied(x.r)).pop();
+  markRead(t); room = { t, me, open };
+  let day = "", body = "";
+  t.forEach(x => {
+    const dd = ymd(c(x.r, B.when)); if (dd && dd !== day) { day = dd; body += `<div class="day"><span>${esc(dd)}</span></div>`; }
+    if (String(c(x.r, B.qja) || c(x.r, B.qen)).trim()) body += `<div class="msg them"><div class="av sm">${esc(ini(c(x.r, B.buyer)))}</div><div class="bubble">${br(c(x.r, B.qja) || c(x.r, B.qen))}${c(x.r, B.qja) ? `<div class="en">${esc(c(x.r, B.qen))}</div>` : ""}</div><time>${esc(hm(c(x.r, B.when)))}</time></div>`;
+    if (open && x.row === open.row && String(c(x.r, B.rja)).trim()) body += `<div class="msg me sugb" id="sug"><time>AIの案<br>長押しで使う</time><div class="bubble">${br(c(x.r, B.rja))}<div class="en">${esc(c(x.r, B.ren))}</div></div></div>`;
+    const stt = String(c(x.r, B.state));
+    if (stt.startsWith("履歴")) {}
+    else if (stt.startsWith("送信済み")) body += `<div class="msg me"><time>送信済み<br>${esc(hm(stt) || "")}</time><div class="bubble">${c(x.r, B.rja) ? br(c(x.r, B.rja)) + `<div class="en">${esc(c(x.r, B.ren))}</div>` : esc(c(x.r, B.ren))}</div></div>`;
+    else if (stt.startsWith("返信不要")) body += `<div class="day"><span>返信しないで済みにしました</span></div>`;
+    else if (stt.startsWith("返信済み")) { if (c(x.r, B.ren)) body += `<div class="msg me"><time>eBayで<br>返信済み</time><div class="bubble">${c(x.r, B.rja) ? br(c(x.r, B.rja)) : esc(c(x.r, B.ren))}</div></div>`; }
+    else if (truthy(c(x.r, B.send))) body += `<div class="msg me pend"><time>送信待ち</time><div class="bubble">${br(c(x.r, B.rja))}<div class="en">${esc(c(x.r, B.ren))}</div></div></div>`;
+    else if (stt.startsWith("送れません")) body += `<div class="msg me"><time style="color:var(--red)">送れません<br>でした</time><div class="bubble">${br(c(x.r, B.rja))}</div></div>`;
+  });
+  pulledNow(d).filter(x => x.buyer + "|" + x.item === tkey(me)).forEach(x => {
+    body += `<div class="msg them pv"><div class="av sm">${esc(ini(x.buyer))}</div><div class="bubble">${br(x.ja || x.en)}<div class="en">${esc(x.en)}</div></div><time>取り込み中<br>返信案は1分ほど</time></div>`; });
+  return `<div class="rh"><button class="back" onclick="location.hash='chat'">‹</button><div class="grow" style="min-width:0"><div class="t">${esc(c(me, B.buyer))}</div>
+    <div class="s rhs"><span class="ell">${esc(itemName(d, me))}</span>${(p => p == null ? "" : `<span class="pft ${p < 0 ? "neg" : ""}">想定利益 ${fmt(p)}</span>`)(profitOf(d, c(me, B.item)))}</div></div>
+    ${lk.src ? `<a class="chip red" href="${esc(lk.src)}" target="_blank" rel="noopener noreferrer">仕入元</a>` : ""}${lk.ebay ? `<a class="chip blue" href="${esc(lk.ebay)}" target="_blank" rel="noopener noreferrer">eBay</a>` : ""}</div>
+  ${body}
+  <div class="ibar"><div class="in"><div class="pre" id="pre">日本語で書くと、相手の言葉にして送ります。${open ? `<button class="skip" onclick="skipReply()">返信しない</button>` : ""}</div>
+    <div class="row" style="gap:8px;align-items:flex-end"><textarea id="msg" rows="1" placeholder="メッセージを入力" oninput="grow(this);liveEn()"></textarea>
+    <button class="sendb" id="sendb" aria-label="送信" onclick="sendMsg(${open ? open.row : 0})"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3.4 20.4l17.5-7.5a1 1 0 000-1.8L3.4 3.6a1 1 0 00-1.4 1.1L4 11l9 1-9 1-2 6.3a1 1 0 001.4 1.1z"/></svg></button></div></div></div>`;
+}
+let room = null;
+let hiddenView = false;
+// 2026/11/14 本人の希望「すぐ返信できる体制」：トークを下に引っ張ると、Gmailに届いたeBayのメッセージをその場で読んで出す
+// （管理表への取り込み・返信案はGitHubの処理。取り込まれたら仮の表示は消える）
+let pulled = [];
+const pulledNow = d => { const ids = new Set((d.msgs || []).map(r => String(c(r, B.id)).trim())); return pulled = pulled.filter(x => !ids.has(String(x.qid))); };
+function pvOpen(i) {
+  const x = pulled[i]; if (!x) return;
+  sheetOpen(`<div class="shh"><div class="t">${esc(x.buyer)}</div><button class="x" onclick="sheetClose()">✕</button></div>
+    <div class="s" style="margin-bottom:10px">${esc(x.title)}</div><div style="line-height:1.7">${br(x.ja || x.en)}</div>
+    <div class="s" style="margin-top:10px;line-height:1.6">${esc(x.en)}</div>
+    <div class="s" style="margin-top:14px">いま取り込み中です。<br>1分ほどで返信案つきのトークに変わります。</div>`);
+}
+let pulling = false, pullTimer = null;
+async function pullMsgs() {
+  if (pulling) return; pulling = true; $("#ptr").classList.add("spin");
+  try {
+    // 2026/11/14 取り込みはその場で管理表に書く形に変えた（仮の表示はやめた）→読み直すだけでトークに出る
+    const om = cache["買い手メッセージ"];   // 取り込みと読み直しを1回の通信で（往復を減らす）
+    const res = await call("msg_pull", { tab: Object.assign({ name: "買い手メッセージ", etag: om && om.etag }, READ_OPT["買い手メッセージ"]) });
+    pulled = res.items || [];
+    const n0 = res.added || pulled.length;
+    if (res.tab) applyTab("買い手メッセージ", res.tab);
+    render(false, true);
+    toast(n0 ? `新しいメッセージ${n0}件を入れました` : "新しいメッセージはありません");
+    clearInterval(pullTimer);
+    if (n0) { let n = 0; pullTimer = setInterval(() => {   // AIの返信案が付くまで10秒ごとに見る（最大3分）
+      if (++n > 18) return clearInterval(pullTimer);
+      if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ"); }, 10000); }
+  } catch (e) { toast(/gmail|権限|permission/i.test(e.message) ? "Gmailを読む許可がまだです（Macで許可が必要）" : e.message); }
+  finally { pulling = false; $("#ptr").classList.remove("spin"); $("#ptr").style.transform = ""; $("#ptr").style.opacity = ""; }
+}
+(() => {   // トークの一番上で下に引っ張ると更新
+  let y0 = null, x0 = 0, dy = 0;
+  const sc = () => $("#scroll"), on = () => location.hash.startsWith("#chat") && !sel.on && !$("#sheet.on");
+  document.addEventListener("touchstart", e => {
+    if (!on() || sc().scrollTop > 0 || e.target.closest("textarea,input,.ibar")) { y0 = null; return; }
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0;
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0 || Math.abs(e.touches[0].clientX - x0) > dy || sc().scrollTop > 0) { dy = 0; $("#ptr").style.opacity = ""; $("#ptr").style.transform = ""; return; }
+    const k = Math.min(dy, 110);
+    $("#ptr").style.opacity = Math.min(1, k / 70); $("#ptr").style.transform = `translate(-50%,${k * 0.5 - 40}px) rotate(${k * 3}deg)`;
+  }, { passive: true });
+  document.addEventListener("touchend", () => {
+    if (y0 == null) return; y0 = null;
+    if (dy > 70) pullMsgs(); else { $("#ptr").style.opacity = ""; $("#ptr").style.transform = ""; }
+    dy = 0;
+  }, { passive: true });
+})();
+const sel = { on: false, rows: new Set(), list: [] };   // トーク一覧の選択
+function selToggle() { sel.on = !sel.on; sel.rows.clear(); render(false, false, true); }
+function selPick(k) { sel.rows.has(k) ? sel.rows.delete(k) : sel.rows.add(k); render(false, false, true); }
+function selAll() { if (sel.rows.size === sel.list.length) sel.rows.clear(); else sel.list.forEach((_, i) => sel.rows.add(i)); render(false, false, true); }
+const selRows = () => [...sel.rows].flatMap(k => sel.list[k] || []);
+async function selHide() {
+  const rows = selRows(); if (!rows.length) return;
+  sel.on = false; sel.rows.clear();
+  fastSet("買い手メッセージ", rows.map(n => [n, B.read, hiddenView ? true : "非表示"]), hiddenView ? "表示に戻しました" : "非表示にしました");
+}
+async function selRead() {
+  const v = cache["買い手メッセージ"].v, rows = selRows().filter(n => !isRead(v[n - 1] || []));
+  sel.on = false; sel.rows.clear();
+  if (rows.length) fastSet("買い手メッセージ", rows.map(n => [n, B.read, true]), "既読にしました"); else render(false, true);
+}
+async function readThread(rows) {   // 未読のトークを右スワイプ一発で既読に
+  const v = cache["買い手メッセージ"].v, need = rows.filter(n => !isRead(v[n - 1] || []));
+  need.forEach(n => { const r = v[n - 1]; while (r.length < B.read) r.push(""); r[B.read - 1] = "TRUE"; });
+  render(false, false, true);
+  try { await setCells("買い手メッセージ", need.map(n => [n, B.read, true])); } catch (e) { toast(e.message); }
+}
+async function selDel() {
+  const rows = selRows(); if (!rows.length) return;
+  if (!confirm(`${sel.rows.size}件のトークを削除しますか？\n元に戻せません。`)) return;
+  document.querySelectorAll(".lrow.picked").forEach(e => e.closest(".sw").classList.add("bye"));
+  try { await setCells("買い手メッセージ", rows.flatMap(n => [[n, B.state, "削除"], [n, B.read, true], [n, B.send, false]])); toast("削除しました"); }
+  catch (e) { toast(e.message); }
+  sel.on = false; sel.rows.clear(); setTimeout(() => render(false), 300);
+}
+function useSug() {   // AIの返信案を入力欄に入れる（英語はAIの案をそのまま使う）
+  if (!room || !room.open) return;
+  const ja = String(c(room.open.r, B.rja)), en = String(c(room.open.r, B.ren)), m = $("#msg");
+  m.value = ja; grow(m); lastEn = { ja: ja.trim(), en };
+  const g = $("#sug");
+  if (g) {   // 吹き出しの写しが入力欄へ飛んでいき、入力欄が光る
+    const b = g.querySelector(".bubble"), r1 = b.getBoundingClientRect(), r2 = m.getBoundingClientRect();
+    const fly = b.cloneNode(true); fly.className = "bubble flyb";
+    Object.assign(fly.style, { left: r1.left + "px", top: r1.top + "px", width: r1.width + "px" });
+    document.body.appendChild(fly);
+    fly.animate([{ transform: "none", opacity: 1 },
+      { transform: `translate(${r2.left - r1.left}px, ${r2.top - r1.top}px) scale(.55)`, opacity: .2 }],
+      { duration: 380, easing: "cubic-bezier(.5,0,.2,1)" }).onfinish = () => fly.remove();
+    g.classList.add("gone");   // 消さずに隠す（入力欄を空にすると戻る）
+    setTimeout(() => { m.classList.add("got"); setTimeout(() => m.classList.remove("got"), 600); }, 340);
+  }
+  m.focus();
+}
+async function skipReply() {   // 返信しないで済みにする（未返信の印を消す）
+  if (!room) return;
+  const cells = room.t.filter(x => !replied(x.r) && !truthy(c(x.r, B.send))).flatMap(x => [[x.row, B.state, "返信不要"], [x.row, B.read, true]]);
+  if (!cells.length) return;
+  // 2026/11/12 先に画面を変えて、管理表への書き込みは裏で（待たせない）
+  const btn = document.querySelector(".skip"); if (btn) btn.remove();
+  fastSet("買い手メッセージ", cells, "返信しないで済みにしました");
+}
+function markRead(t) {   // 開いたトークは既読に（30分以内にeBay側も既読になる）
+  const cells = t.filter(x => !isRead(x.r)).map(x => [x.row, B.read, true]);
+  if (!cells.length) return;
+  cells.forEach(([row]) => { const r = cache["買い手メッセージ"] && cache["買い手メッセージ"].v[row - 1]; if (r) r[B.read - 1] = true; });
+  const v = cache["買い手メッセージ"] && cache["買い手メッセージ"].v;
+  if (v) badge("b-chat", v.filter((r, i) => i > 0 && String(c(r, B.when)).trim() && !isRead(r)).length);
+  call("tab_set", { name: "買い手メッセージ", cells }).catch(() => {});
+}
+function grow(e) { e.style.height = "auto"; e.style.height = Math.min(e.scrollHeight, 140) + "px"; }
+let lastEn = { ja: "", en: "" };
+async function toEn(ja) {
+  if (lastEn.ja === ja) return lastEn.en;
+  const r = await call("translate", { texts: [ja], to: "en" });
+  lastEn = { ja, en: (r.texts || [""])[0] };
+  return lastEn.en;
+}
+let liveT;
+function liveEn() {
+  const g = $("#sug"), e0 = $("#msg"); if (g && e0 && !e0.value.trim()) g.classList.remove("gone");
+  clearTimeout(liveT);
+  liveT = setTimeout(async () => {
+    const e = $("#msg"); if (!e) return; const ja = e.value.trim(); if (!ja) return;
+    try { const en = await toEn(ja); if ($("#msg") && $("#msg").value.trim() === ja) { } } catch (er) {}
+  }, 900);
+}
+async function sendMsg(row) {
+  const ja = $("#msg").value.trim(); if (!ja) return toast("文章を入れてください");
+  const b = $("#sendb");
+  b.disabled = true;
+  try {
+    if (lastEn.ja !== ja) await toEn(ja);
+    if (row) await setCells("買い手メッセージ", [[row, B.ren, lastEn.en], [row, B.rja, ja], [row, B.send, true]]);
+    else {   // 返信する質問がないときは、新しいメッセージとして1行足す（30分以内にeBayから送る）
+      const v = cache["買い手メッセージ"].v, me = room.me, d = new Date();
+      let n = v.findIndex((r, i) => i > 0 && !String(r[0] || "").trim()) + 1; if (n < 2) n = v.length + 1;   // A列が空の最初の行
+      const when = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const vals = [when, c(me, B.title), c(me, B.item), c(me, B.buyer), "", "", lastEn.en, ja, true, "未送信", "new:" + Date.now(), true];
+      await setCells("買い手メッセージ", vals.map((x, i) => [n, i + 1, x]));
+    }
+    let quick = false;
+    try { quick = !!(await call("msg_send")).kicked; } catch (er) {}
+    toast(quick ? "送信待ちにしました。1〜2分で送られます" : "送信待ちにしました。30分以内に送られます"); lastEn = { ja: "", en: "" }; render(false);
+  } catch (e) { b.disabled = false; toast(e.message); }
+}
+
+// ---- お金 ----
+// 2026/11/13 利益表をネテルマニと同じカレンダーの形に（色はハコペンのまま）。機能は「収支表 MAXBET」を参考に：
+// カレンダー＝日ごとの利益をマスに出し、押すと下からその日の明細。左右スワイプ・矢印で月を移動。
+// 収支表＝期間（月・年・全期間）と種類（ガラケー・時計など）で絞り込み、件数・黒字の件数・平均・最高・最低・経費、グラフ、機種別の順位。
+// 数字は売上（確定利益、無ければ見込み利益）と経費の行から計算する＝月別収支の「本当の利益」と同じ（10月 −6,715円で確認）
+const PRINT_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>`;
+const ARW = d => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+let calMon = null;
+const pmY = v => (v > 0 ? "+" : v < 0 ? "−" : "") + "¥" + Math.abs(Math.round(v)).toLocaleString();
+const cmp = v => (v > 0 ? "+" : v < 0 ? "−" : "") + "¥" + Math.abs(Math.round(v)).toLocaleString();
+const sumV = a => a.reduce((s, x) => s + x.v, 0);
+function moneyRows() {   // 売上と経費を1件ずつ {d:"2026/10/19", v:利益(円), kind:"sale"|"exp", name, tag:種類, k:行, est:見込みか}
+  const sv = (cache["売上"] || {}).v || [], ev = (cache["経費"] || {}).v || [], L = [];
+  const nd = s => { const m = String(s).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/); return m ? `${m[1]}/${m[2].padStart(2, "0")}/${m[3].padStart(2, "0")}` : ""; };
+  sv.forEach((r, k) => { if (k < S.head) return; const d = nd(c(r, S.date)); if (!d) return;
+    const fixed = String(c(r, SX.fixed)).trim(), est = String(c(r, SX.est)).trim(), name = String(c(r, S.model) || c(r, S.title)).trim();
+    L.push({ d, v: fixed ? yen(fixed) : yen(est), kind: "sale", name, tag: name.split(/\s+/)[0] || "その他", k, est: !fixed && est.startsWith("(") }); });
+  ev.forEach((r, k) => { if (k < 5) return; const d = nd(r[0]); if (!d || !yen(r[2])) return;
+    L.push({ d, v: -yen(r[2]), kind: "exp", name: String(r[1] || "経費"), tag: "経費", k }); });
+  return L;
+}
+let moneyJump = false;   // 2026/11/13 下の「利益表」タブを押したら今日の日付へ（動きつき）
+async function viewMoney(fresh) {
+  await Promise.all([tab("売上", fresh).catch(() => {}), tab("経費", fresh).catch(() => {})]);
+  if (!cache["ジャンク品在庫"]) tabSoft("ジャンク品在庫");   // 右上の一覧の「仕入れ」用（待たない）
+  const n = new Date(), cur = new Date(n.getFullYear(), n.getMonth(), 1);
+  let anim = "";
+  if (!calMon) calMon = cur;
+  if (moneyJump) { moneyJump = false; anim = cur > calMon ? "next" : cur < calMon ? "prev" : "jump"; calMon = cur; }
+  return `<div class="home money" id="money">${moneyInner(anim)}</div>`;
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest && e.target.closest('nav a[data-t="money"]'); if (!a) return;
+  if (location.hash === "#money") { e.preventDefault(); calGo(0); } else moneyJump = true;
+}, true);
+function moneyInner(anim) { return calHtml(anim); }   // 11/13 本人：カレンダーと入れ替える収支表はいらない（カレンダーだけ）
+function redrawMoney(anim) { const m = $("#money"); if (!m) return; m.innerHTML = moneyInner(anim); render.html = null; moneyAfter(); }
+function calGo(n) {   // n=0：今月へ
+  const now = new Date(), cur = new Date(now.getFullYear(), now.getMonth(), 1), old = calMon;
+  calMon = n === 0 ? cur : new Date(calMon.getFullYear(), calMon.getMonth() + n, 1);
+  redrawMoney(calMon > old ? "next" : calMon < old ? "prev" : n === 0 ? "jump" : "");
+}
+function monHead(big, label, sub, anim) {
+  const now = new Date(), isCur = calMon.getFullYear() === now.getFullYear() && calMon.getMonth() === now.getMonth();
+  const y = calMon.getFullYear(), mo = calMon.getMonth() + 1, nav = true;
+  const lab = `<small>${y}年</small><b>${mo}月</b>`;
+  return `<div class="calhead"><div class="cl1"></div>
+    <div class="mnav">${nav ? `<button class="nb" onclick="calGo(-1)" aria-label="前へ">${ARW("M15 5l-7 7 7 7")}</button>` : ""}<div class="mlabel">${lab}</div>${nav ? `<button class="nb" onclick="calGo(1)" aria-label="次へ">${ARW("M9 5l7 7-7 7")}</button>` : ""}</div>
+    <button class="msum" onclick="monList()"><b class="${big < 0 ? "dn" : "up"}">${pmY(big)}${CHEV}</b><span>${sub}</span></button></div>`;
+}
+function calHtml(anim) {
+  const y = calMon.getFullYear(), mo = calMon.getMonth(), pre = `${y}/${String(mo + 1).padStart(2, "0")}`;
+  const rows = moneyRows(), by = {};
+  rows.forEach(x => (by[x.d] = by[x.d] || []).push(x));
+  const mine = rows.filter(x => x.d.startsWith(pre)), sale = mine.filter(x => x.kind === "sale"), exp = mine.filter(x => x.kind === "exp");
+  const cum = sumV(rows.filter(x => x.d.slice(0, 7) <= pre));
+  const first = new Date(y, mo, 1).getDay(), today = ymdS(new Date());
+  let cells = "";
+  for (let i = 0; i < 42; i++) {
+    const dt = new Date(y, mo, 1 - first + i), ds = ymdS(dt), wd = i % 7, out = dt.getMonth() !== mo;
+    const L = out ? [] : (by[ds] || []), v = sumV(L);
+    const cls = ["cell", out ? "out" : "", ds === today ? "today" : "", L.length ? (v > 0 ? "pos" : v < 0 ? "neg" : "") : "", L.some(x => x.est) ? "est" : ""].join(" ");
+    const col = !out && ds !== today && wd === 0 ? ' style="color:var(--sun)"' : !out && ds !== today && wd === 6 ? ' style="color:var(--sat)"' : "";
+    cells += `<button class="${cls}" ${out ? 'tabindex="-1"' : `onclick="calDay('${ds}')"`}><span class="num"${col}>${dt.getDate()}</span>`
+      + (L.length ? `<span class="amt">${cmp(v)}</span>` : "") + `</button>`;
+  }
+  return monHead(sumV(mine), "", `累計 ${pmY(cum)}`, anim)
+    + `<div class="mstrip mst2"><span>売上<b>${sale.length}件</b><b class="${sumV(sale) < 0 ? "dn" : ""}">${pmY(sumV(sale))}</b></span><span>経費<b class="dn">${pmY(sumV(exp))}</b></span></div>
+    <div class="wdrow">${"日月火水木金土".split("").map((w, i) => `<span class="${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${w}</span>`).join("")}</div>
+    <div class="calbody" id="calbody"><div class="cal ${anim && anim !== "jump" ? "a-" + anim : ""} ${anim ? "jumped" : ""}">${cells}</div></div>`;
+}
+const CHEV = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`;
+function monList() {   // 11/13 本人：右上の金額を押すと、その月の売れた商品・経費・仕入れた在庫を全部まとめた一覧
+  const y = calMon.getFullYear(), m = calMon.getMonth() + 1, pre = `${y}/${String(m).padStart(2, "0")}`;
+  const L = moneyRows().filter(x => x.d.startsWith(pre)), tot = sumV(L);
+  const nd = s => { const r = String(s).match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/); return r ? `${r[1]}/${r[2].padStart(2, "0")}/${r[3].padStart(2, "0")}` : ""; };
+  const dev = (cache["ジャンク品在庫"] || {}).v || [], buy = [];
+  dev.forEach((r, i) => { const d = nd(c(r, J.day)); if (i < 1 || !d.startsWith(pre) || !yen(c(r, J.cost))) return;
+    buy.push({ d, v: -yen(c(r, J.cost)), kind: "buy", name: `${c(r, J.model)} ${c(r, J.color)}`.trim() || c(r, J.no), row: i + 1 }); });
+  const all = L.concat(buy).sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  const md = d => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+  const TAG = { sale: ['<span class="etag sale">売上</span>', x => `saleSheet(${x.k})`], exp: ['<span class="etag">経費</span>', x => `expSheet(${x.k})`], buy: ['<span class="etag buy">仕入れ</span>', x => `stockSheet(${x.row})`] };
+  const n = k => all.filter(x => x.kind === k).length;
+  sheetOpen(`<div class="shh"><div class="t">${m}月の収支</div><button class="x" onclick="sheetClose()">✕</button></div>
+    <div class="row" style="align-items:baseline;margin-bottom:2px"><div class="dtot ${tot < 0 ? "dn" : "up"}" style="margin:0">${pmY(tot)}</div><span class="s" style="margin-left:auto">売上 ${n("sale")}件・経費 ${n("exp")}件・仕入れ ${n("buy")}件</span></div>
+    ${buy.length ? `<div class="s" style="margin-bottom:6px">仕入れた在庫は、売れたときに利益に入ります。<br>今月の利益の数字には入っていません。</div>` : ""}
+    <div class="trbox" style="max-height:58vh">${all.length ? all.map(x => `<div class="trr${x.kind === "buy" ? " off" : ""}" onclick="${TAG[x.kind][1](x)}"><span class="dt">${md(x.d)}</span><span class="nm">${TAG[x.kind][0]}${esc(x.name)}</span><span class="pp ${x.kind === "buy" ? "" : x.v < 0 ? "dn" : "up"}">${x.est ? "<small>見込 </small>" : ""}${pmY(x.v)}</span></div>`).join("")
+      : '<div class="s" style="padding:8px 0">この月の記録はありません。</div>'}</div>`);
+}
+function calDay(ds) {
+  const L = moneyRows().filter(x => x.d === ds).sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "sale" ? -1 : 1)), [, m, d] = ds.split("/").map(Number), tot = sumV(L);
+  sheetOpen(`<div class="shh"><div class="t">${m}月${d}日</div><button class="x" onclick="sheetClose()">✕</button></div>
+    ${L.length ? `<div class="dtot ${tot < 0 ? "dn" : "up"}">${pmY(tot)}</div>` : ""}
+    <div class="trbox" style="max-height:46vh">${L.length ? L.map(x => `<div class="trr" onclick="${x.kind === "sale" ? `saleSheet(${x.k})` : `expSheet(${x.k})`}"><span class="nm">${x.kind === "exp" ? '<span class="etag">経費</span>' : ""}${esc(x.name)}</span><span class="pp ${x.v < 0 ? "dn" : "up"}">${x.est ? "<small>見込 </small>" : ""}${pmY(x.v)}</span></div>`).join("")
+      : '<div class="s" style="padding:8px 0">この日の記録はありません。</div>'}</div>
+    <button class="sub" style="width:100%;margin-top:12px;height:44px" onclick="expenseSheet('${ds}')">＋この日の経費を足す</button>`);
+}
+function fitMoney() {   // 11/13 本人：カレンダーの大きさをフクリのFXに合わせる＝下のタブの8px上までぴったり伸ばす
+  const b = $("#money"), n = document.querySelector("nav"); if (!b || !n) return;
+  b.style.height = Math.max(300, n.getBoundingClientRect().top - 8 - b.getBoundingClientRect().top) + "px";
+}
+["resize", "orientationchange", "pageshow"].forEach(ev => addEventListener(ev, () => setTimeout(fitMoney, 80)));
+function moneyAfter() {   // カレンダー・収支表を左右にスワイプして前後の月（年）へ
+  fitMoney(); requestAnimationFrame(fitMoney);
+  const b = $("#money"); if (!b || b.dataset.sw) return; b.dataset.sw = 1; let x0 = null, y0 = 0;
+  b.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  b.addEventListener("touchmove", e => {   // 11/13 本人：カレンダー・収支表とも縦にスクロールさせない
+    if (x0 == null) return; const t = e.touches[0]; if (Math.abs(t.clientY - y0) > Math.abs(t.clientX - x0)) e.preventDefault();
+  }, { passive: false });
+  b.addEventListener("touchend", e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 2) calGo(dx < 0 ? 1 : -1); }, { passive: true });
+}
+function expSheet(k) {   // 経費1件の内訳
+  const r = ((cache["経費"] || {}).v || [])[k]; if (!r) return;
+  const line = (a, b) => `<div class="dl"><span>${a}</span><b>${b}</b></div>`;
+  sheetOpen(`<div class="shh"><div class="t">${esc(r[1])}</div><button class="x" onclick="sheetClose()">✕</button></div>
+    ${line("日付", esc(r[0]))}${line("金額", fmt(yen(r[2])))}${r[3] ? line("ドル", esc(r[3])) : ""}
+    ${r[4] ? `<div class="s" style="margin-top:10px">${esc(r[4])}</div>` : ""}`);
+}
+function saleSheet(k) {   // 売れた商品1件の内訳
+  const r = ((cache["売上"] || {}).v || [])[k]; if (!r) return;
+  const money = v => { const t = String(v || "").trim(); return t.startsWith("(") ? `（${fmt(yen(t))}）` : fmt(yen(t)); };
+  const line = (a, b, cls = "") => `<div class="dl ${cls}"><span>${a}</span><b>${b}</b></div>`;
+  const fixed = String(c(r, SX.fixed)).trim(), src = String(c(r, S.src)), item = String(c(r, S.item)).replace(/\D/g, "");
+  sheetOpen(`<div class="shh"><div class="t">${esc(c(r, S.model) || c(r, S.title))}</div><button class="x" onclick="sheetClose()">✕</button></div>
+    <div class="s" style="margin-bottom:8px">${esc(c(r, S.date))}に売れました。<br>状態 ${esc(c(r, S.rank) || "−")}</div>
+    ${line("売れた値段", money(c(r, SX.price)))}${line("仕入れ", money(c(r, SX.cost)))}${line("eBay手数料", money(c(r, SX.fee)))}${line("広告費", money(c(r, SX.ad)))}
+    ${line("送料", money(c(r, SX.ship)))}${line("関税", money(c(r, SX.duty)))}${line("入金手数料", money(c(r, SX.pay)))}
+    ${line(fixed ? "利益（確定）" : "利益（見込み）", fixed ? fmt(yen(fixed)) : money(c(r, SX.est)), "sum")}
+    <div class="row" style="gap:6px;margin-top:12px">${/^https?:/.test(src) ? `<a class="chip red" href="${esc(src)}" target="_blank" rel="noopener noreferrer">仕入れ先</a>` : ""}
+    ${item ? `<a class="chip blue" href="https://www.ebay.com/itm/${item}" target="_blank" rel="noopener noreferrer">eBay</a>` : ""}</div>`);
+}
+
+// ---- 利益表の「書類」：年月を選んで、売上明細・古物台帳を「PDFで保存」または家のプリンターで「印刷」（2026/11/12） ----
+// PDFで保存＝輸出帳の pdf（その月のPDFを作って返す）→ iPhoneの共有画面（ファイルに保存など）
+// 印刷＝売上AF3に「書類|年月」→ Macのship.py（5分ごと）が管理表でその月のPDFを作って印刷し、AF3を空に戻す
+const DOCS = [["sales", "売上明細"], ["ledger", "古物台帳（仕入帳）"]];
+function printSheet() {
+  const d = calMon || new Date(), val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  sheetOpen(`<div class="shh"><div class="t">印刷</div><button class="x" onclick="sheetClose()">閉じる</button></div>
+    <div class="s" style="margin-bottom:12px">選んだ月の分をPDFで保存、または家のプリンターで印刷します。<br>印刷は押してから5分以内に出てきます。</div>
+    <div class="g2f" style="grid-template-columns:1fr"><label><span class="s">年月</span><input id="pr_ym" type="month" value="${val}"></label></div>
+    ${DOCS.map(([k, t]) => `<div class="s" style="margin-top:14px">${t}</div><div class="row" style="gap:8px;margin-top:6px">
+      <button class="full grow" style="height:46px" onclick="savePdf('${k}',this)">PDFで保存</button>
+      <button class="sub" style="height:46px;padding:0 18px" onclick="printDoc('${k}')">印刷</button></div>`).join("")}
+    <div class="s" style="margin-top:14px">収支のCSV（表計算アプリ用）</div><div class="row" style="gap:8px;margin-top:6px">
+      <button class="sub grow" style="height:46px" onclick="saveCsv(false)">この月をCSVで保存</button><button class="sub grow" style="height:46px" onclick="saveCsv(true)">全部をCSVで保存</button></div>
+    <div id="pr_out"></div>`);
+}
+function prYm() { const v = ($("#pr_ym") || {}).value || "", m = v.match(/^(\d{4})-(\d{2})$/); return m; }
+let pdfFile = null;
+async function savePdf(kind, btn) {
+  const m = prYm(); if (!m) { toast("年月を選んでください"); return; }
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "作っています…";
+  try {
+    const r = await call("pdf", { kind, ym: `${m[1]}/${m[2]}` });
+    const b = atob(r.b64), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    pdfFile = new File([u], r.name, { type: "application/pdf" });
+    const url = URL.createObjectURL(pdfFile);
+    // 共有画面は押した直後でないと開けないので、できあがったらもう一度押してもらう
+    $("#pr_out").innerHTML = `<div class="card" style="margin-top:14px;padding:14px 16px"><div>${esc(r.name)}</div><div class="s">${r.n}件</div>
+      <div class="row" style="gap:8px;margin-top:10px"><button class="full grow" style="height:44px" onclick="sharePdf()">保存する</button>
+      <a href="${url}" target="_blank" rel="noopener"><button class="sub" style="height:44px;padding:0 16px">開いて見る</button></a></div></div>`;
+  } catch (e) { toast("PDFを作れませんでした：" + e.message); }
+  finally { btn.disabled = false; btn.textContent = old; }
+}
+async function sharePdf() {
+  if (!pdfFile) return;
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) { await navigator.share({ files: [pdfFile] }); return; }
+  } catch (e) { if (e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(pdfFile); a.download = pdfFile.name; document.body.appendChild(a); a.click(); a.remove();
+}
+function saveCsv(all) {   // 2026/11/13 収支の書き出し（MAXBETの書き出しと同じ役目）。日付・種類・内容・利益
+  const m = prYm(); if (!all && !m) { toast("年月を選んでください"); return; }
+  const pre = m ? `${m[1]}/${m[2]}` : "", rows = moneyRows().filter(x => all || x.d.startsWith(pre)).sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = "\ufeff" + [["日付", "種類", "内容", "利益(円)"], ...rows.map(x => [x.d, x.kind === "sale" ? "売上" : "経費", x.name, Math.round(x.v)])].map(r => r.map(q).join(",")).join("\r\n");
+  pdfFile = new File([csv], `ハコペン収支_${all ? "全期間" : pre.replace("/", "-")}.csv`, { type: "text/csv" });
+  sharePdf();
+}
+function printDoc(kind) {
+  const m = prYm(); if (!m) { toast("年月を選んでください"); return; }
+  const t = (DOCS.find(x => x[0] === kind) || [])[1], label = `${m[1]}年${Number(m[2])}月の${t}`;
+  if (!confirm(`${label}を印刷しますか？`)) return;
+  sheetClose();
+  fastSet("売上", [[3, 31, "書類の印刷"], [3, 32, `${kind}|${m[1]}/${m[2]}`]], "5分以内に家のプリンターで印刷します");
+}
+
+// ---- 利益表の詳細（下から出るシート） ----
+const SX = { price: 6, cost: 7, fee: 8, ad: 9, ship: 10, duty: 11, pay: 12, est: 13, fixed: 16 };
+function sheetOpen(h) { $("#shb").innerHTML = h; $("#sheet").classList.add("on"); }
+(() => {   // 2026/11/13 下から出る画面は、下にスワイプすると閉じる（中の一覧をスクロール中は閉じない）
+  let y0 = null, dy = 0, sc = null;
+  const shb = () => $("#shb");
+  document.addEventListener("touchstart", e => {
+    const b = shb(); if (!b || !$("#sheet.on") || !b.contains(e.target) || e.target.closest("input,textarea,select")) { y0 = null; return; }
+    sc = e.target.closest(".trbox,.exl"); if ((sc && sc.scrollTop > 0) || b.scrollTop > 0) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0;
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    if (y0 == null) return; dy = e.touches[0].clientY - y0;
+    if (dy <= 0) { shb().style.transform = ""; return; }
+    e.preventDefault(); const b = shb(); b.style.transition = "none"; b.style.transform = `translateY(${dy}px)`;
+  }, { passive: false });
+  document.addEventListener("touchend", () => {
+    if (y0 == null) return; y0 = null; const b = shb(); b.style.transition = ""; b.style.transform = "";
+    if (dy > 90) sheetClose(); dy = 0;
+  }, { passive: true });
+})();
+function sheetClose() { $("#sheet").classList.remove("on"); }
+function detail(kind, key) {
+  const m = (cache["月別収支"] || {}).v || [], head = m[0] || [];
+  const col = name => head.findIndex(x => String(x).startsWith(name)) + 1;
+  const mr = m.find(r => r[0] === key) || [];
+  const mm = String(key).match(/(\d{4})年(\d{1,2})月/); const pre = mm ? `${mm[1]}/${mm[2].padStart(2, "0")}` : "";
+  const sales = ((cache["売上"] || {}).v || []).filter((r, i) => i >= S.head && String(c(r, S.date)).startsWith(pre));
+  const line = (a, b, cls = "") => `<div class="dl ${cls}"><span>${a}</span><b>${b}</b></div>`;
+  const money = v => { const t = String(v || "").trim(); return t.startsWith("(") ? `（${fmt(yen(t))}）` : fmt(yen(t)); };
+  let h = `<div class="shh"><div class="t">${esc(key)}</div><button class="x" onclick="sheetClose()">✕</button></div>`;
+  if (kind === "cost") {
+    h += `<div class="s" style="margin-bottom:8px">売れた商品ごとの手数料・仕入れ・送料は「売上の利益」に入っています。<br>ここは毎月かかるお金です。</div>`;
+    ["eBay出品手数料・ストア代", "段ボール", "Claude", "その他の経費"].forEach(n => { h += line(n, money(c(mr, col(n)))); });
+    h += line("経費の合計", fmt(yen(c(mr, col("本当の利益"))) - yen(c(mr, col("売上の利益")))), "sum");
+  } else {
+    if (kind === "profit") {
+      h += `<div class="s" style="margin-bottom:6px">売上の利益の内訳</div>`;
+      [["売上", "売上"], ["仕入れ", "仕入れ"], ["eBay手数料", "eBay手数料"], ["送料", "送料"], ["関税", "関税"], ["入金手数料", "入金手数料"], ["広告費", "広告費"]].forEach(([a, n]) => { h += line(a, money(c(mr, col(n)))); });
+      h += line("売上の利益", money(c(mr, col("売上の利益"))), "sum") + `<div class="s" style="margin:14px 0 6px">売れた商品</div>`;
+    } else h += `<div class="s" style="margin-bottom:6px">${sales.length}件売れました。<br>押すと仕入れ先・eBayを開けます。</div>`;
+    if (!sales.length) h += `<div class="empty">この月に売れた商品はありません。</div>`;
+    h += sales.map(r => {
+      const fixed = String(c(r, SX.fixed)).trim(), p = fixed ? fmt(yen(fixed)) : money(c(r, SX.est));
+      const src = String(c(r, S.src)), item = String(c(r, S.item)).replace(/\D/g, "");
+      return `<div class="card"><div class="row"><div class="grow"><div class="t">${esc(c(r, S.model) || c(r, S.title))}</div><div class="s">${esc(c(r, S.date))}・状態 ${esc(c(r, S.rank) || "−")}</div></div>
+        <div style="text-align:right"><div class="s">利益</div><b style="font-size:18px">${p}</b></div></div>
+        <div class="dl2"><span>売れた値段 ${money(c(r, SX.price))}</span><span>仕入れ ${money(c(r, SX.cost))}</span><span>eBay手数料 ${money(c(r, SX.fee))}</span><span>送料 ${money(c(r, SX.ship))}</span></div>
+        <div class="row" style="gap:6px;margin-top:8px">${/^https?:/.test(src) ? `<a class="chip red" href="${esc(src)}" target="_blank" rel="noopener noreferrer">仕入れ先</a>` : `<span class="s">${esc(src.slice(0, 20))}</span>`}
+        ${item ? `<a class="chip blue" href="https://www.ebay.com/itm/${item}" target="_blank" rel="noopener noreferrer">eBay</a>` : ""}</div></div>`; }).join("");
+  }
+  sheetOpen(h);
+}
+// ---- 在庫管理（2026/11/12）：売約済み（仕入れ済み・未発送）／手元在庫で出品中／ジャンク品在庫の未出品 ----
+const J = { done: 1, no: 2, model: 3, color: 4, src: 5, day: 6, rank: 7, cost: 8, state: 9, parts: 10, memo: 11, label: 12, sale: 13, profit: 14 };
+let invKind = "all";
+function fxNow(sales) {   // 売上シートの為替（円/$）の一番新しい値。無ければ150円
+  for (let i = sales.length - 1; i > S.head; i--) { const v = yen(c(sales[i], 20)); if (v > 50) return v; }
+  return 150;
+}
+// 2026/11/13 在庫管理を軽く：3つのシートを同時に読む。まだ無いシート（カメラ出品）は「空」として覚えて、毎回待たない
+function tabSoft(name, fresh) {
+  return tab(name, fresh).catch(() => { cache[name] = { at: Date.now(), v: [] }; ss.set("c:" + name, JSON.stringify(cache[name])); return []; });
+}
+async function invData(fresh, camP) {
+  const [d, dev] = await Promise.all([load(fresh), tabSoft("ジャンク品在庫", fresh), camP]);
+  const h = homeData(d), fx = fxNow(d.sales), out = [];
+  [["wait", "到着待ち"], ["pack", "梱包待ち"], ["ship", "発送中"]].forEach(([k, n]) => h[k].filter(x => !x.sent).forEach(x => out.push({
+    kind: "sold", sub: n, name: c(x.r, S.model) || c(x.r, S.title), cost: yen(c(x.r, 7)), price: yen(c(x.r, S.price)),
+    profit: String(c(x.r, S.profit)).trim() ? yen(c(x.r, S.profit)) : null, item: String(c(x.r, S.item)).replace(/\D/g, "").slice(-12) })));
+  d.list.forEach((r, i) => { if (i < 1 || !String(c(r, L.url)).trim().startsWith("手元在庫") || String(c(r, L.state)) !== "active") return;
+    out.push({ kind: "list", sub: "出品中", name: c(r, L.title), cost: yen(c(r, L.cost)), price: Math.round(yen(c(r, 11)) * fx),
+      profit: String(c(r, L.profit)).trim() ? yen(c(r, L.profit)) : null, item: String(c(r, L.item)).trim(), note: c(r, L.url), drop: dropNote(c(r, 7)) }); });
+  dev.forEach((r, i) => { if (i < 1 || !String(c(r, J.no)).trim() || truthy(c(r, J.done))) return;
+    out.push({ kind: "dev", sub: "未出品", row: i + 1, r, no: c(r, J.no), name: `${c(r, J.model)} ${c(r, J.color)}`.trim(), cost: yen(c(r, J.cost)),
+      price: String(c(r, J.sale)).trim() ? yen(c(r, J.sale)) : null, profit: String(c(r, J.profit)).trim() ? yen(c(r, J.profit)) : null }); });
+  return { out, dev };
+}
+const INV_KINDS = [["all", "すべて"], ["sold", "売約済み"], ["list", "出品中"], ["dev", "未出品"]];
+async function viewStock(fresh) {
+  const camP = tabSoft("カメラ出品", fresh);
+  const { out } = await invData(fresh, camP);
+  const cam = camOpenRows(await camP);
+  const sum = k => out.reduce((a, x) => a + (x[k] || 0), 0);
+  const shown = invKind === "all" ? out : out.filter(x => x.kind === invKind);
+  const card = (x, i) => `<div class="card ci" ${cardIn(i)} ${x.kind === "dev" ? `onclick="stockSheet(${x.row})"` : ""}>
+    <div class="row"><div class="grow"><div class="t">${esc(x.name || "（名前なし）")}</div><div class="s">${x.no ? esc(x.no) + "・" : ""}${esc(x.sub)}</div></div>
+    ${x.item && x.kind !== "dev" ? `<a class="chip blue" href="https://www.ebay.com/itm/${esc(x.item)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">eBay</a>` : ""}</div>
+    <div class="ivn"><div><span class="s">仕入れ</span><b>${fmt(x.cost)}</b></div><div><span class="s">販売${x.kind === "sold" ? "" : "予定"}</span><b>${x.price == null ? "−" : fmt(x.price)}</b></div>
+    <div><span class="s">利益${x.kind === "sold" ? "" : "予定"}</span><b class="${(x.profit || 0) < 0 ? "neg" : "pos"}">${x.profit == null ? (x.price == null ? "−" : "計算中") : fmt(x.profit)}</b></div></div>
+    ${x.drop ? `<div class="camdrop">${esc(x.drop)}</div>` : ""}</div>`;
+  return `<div class="home inv"><div class="hhead"><div class="grow"><div class="s">在庫の利益予定</div><div class="hnum ${sum("profit") < 0 ? "neg" : ""}">${fmt(sum("profit"))}</div></div>
+    <button class="addx" onclick="stockSheet()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>在庫</button></div>
+    <div class="ivsum"><div><span class="s">在庫</span><b>${out.length}台</b></div><div><span class="s">仕入れ合計</span><b>${fmt(sum("cost"))}</b></div><div><span class="s">販売予定合計</span><b>${fmt(sum("price"))}</b></div></div>
+    <div class="mtabs ivt">${INV_KINDS.map(([k, n]) => `<button class="mt ${k === invKind ? "on" : ""}" onclick="invKind='${k}';render(false,true)">${n} ${k === "all" ? out.length : out.filter(x => x.kind === k).length}</button>`).join("")}</div>
+    <div class="ivl">${cam.map(camCard).join("")}${shown.length ? more(shown, card) : emptyStage("ここに出る在庫はありません。", invKind === "dev" || invKind === "all" ? "右上の「＋在庫」から追加できます。" : "")}</div></div>`;
+}
+let stRank = "B";
+function stockSheet(row) {
+  const dev = (cache["ジャンク品在庫"] || {}).v || [], r = row ? dev[row - 1] || [] : [];
+  const d = new Date(), today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  stRank = (row && c(r, J.rank)) || "B";
+  const f = (id, label, v, ph, type = "text") => `<label><span class="s">${label}</span><input id="${id}" type="${type}" ${type === "number" ? 'inputmode="numeric"' : ""} value="${esc(v)}" placeholder="${ph}"></label>`;
+  sheetOpen(`<div class="shh"><div class="t">${row ? esc(c(r, J.no)) + " を直す" : "在庫を追加"}</div><button class="x" onclick="sheetClose()">閉じる</button></div>
+    <div class="g2f">${f("sv_model", "機種", c(r, J.model), "903KC")}${f("sv_color", "色", c(r, J.color), "シルバー")}</div>
+    <div class="g2f">${f("sv_cost", "仕入れ合計（円）", c(r, J.cost), "4,930", "number")}${f("sv_sale", "販売予定（円）", c(r, J.sale), "15,000", "number")}</div>
+    <div class="g2f">${f("sv_src", "仕入れ先", c(r, J.src), "メルカリ")}${f("sv_day", "仕入日", String(c(r, J.day) || "").replace(/\//g, "-") || today, "", "date")}</div>
+    <div class="s" style="margin-top:10px">直したあとのランク見込み</div>
+    <div class="seg" style="margin-top:6px">${["S", "A", "B", "C"].map(k => `<button class="${k === stRank ? "on" : ""}" onclick="stRank='${k}';this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">${k}</button>`).join("")}</div>
+    <label style="display:block;margin-top:10px"><span class="s">故障・メモ</span><input id="sv_memo" value="${esc(c(r, J.memo))}" placeholder="ヒンジ割れ・電池交換が必要"></label>
+    <div class="s" style="margin-top:10px">利益予定は、販売予定の値段で売れたときの利益です。<br>30分以内に自動で計算されます。</div>
+    <button class="full" style="width:100%;margin-top:14px;height:46px" onclick="saveStock(${row || 0})">${row ? "保存する" : "追加する"}</button>`);
+}
+async function saveStock(row) {
+  const v = id => $("#" + id).value.trim(), model = v("sv_model"), cost = Number(v("sv_cost")), sale = Number(v("sv_sale"));
+  if (!model) return toast("機種を入れてください");
+  try {
+    const dev = await tab("ジャンク品在庫", true);
+    let no = row ? c(dev[row - 1], J.no) : "";
+    if (!row) {
+      row = dev.findIndex((r, i) => i >= 1 && !String(c(r, J.no)).trim()) + 1; if (row < 2) row = dev.length + 1;
+      const n = Math.max(0, ...dev.map(r => Number((String(c(r, J.no)).match(/K-(\d+)/) || [])[1] || 0)));
+      no = `K-${String(n + 1).padStart(3, "0")}`;
+    }
+    const cells = [[row, J.no, no], [row, J.model, model], [row, J.color, v("sv_color")], [row, J.src, v("sv_src")], [row, J.day, v("sv_day").replace(/-/g, "/")],
+      [row, J.rank, stRank], [row, J.cost, cost || 0], [row, J.memo, v("sv_memo")], [row, J.sale, sale > 0 ? sale : ""], [row, J.label, `${no} ${model} ${v("sv_color")}`.slice(0, 24)]];
+    if (!truthy(c(dev[row - 1], J.done))) cells.push([row, J.done, false]);
+    if (!(sale > 0)) cells.push([row, J.profit, ""]);
+    await setCells("ジャンク品在庫", cells);
+    sheetClose(); toast(`${no} を保存しました`); render(false);
+  } catch (e) { toast(e.message); }
+}
+
+// ---- カメラ出品（2026/11/12）：撮る→AIが判定（機種・色・ランク・英語）→値段を見て「出品する」。裏は輸出帳(cam_new/cam_go)→sales.yml job=camera ----
+const K = { when: 1, st: 2, pics: 3, model: 4, color: 5, rank: 6, note: 7, title: 8, cost: 9, no: 10, usd: 11, yen: 12, profit: 13, why: 14, item: 15, res: 16 };
+let camShots = [], camNo = "", camCost = "", camRk = "B", camDirty = false, camTimer = null, camLocal = {};
+function dropNote(res) {
+  res = String(res || "");
+  if (/下限に到達/.test(res)) return "値下げの下限です。\nこれ以上は下げません。";
+  const m = res.match(/次の値下げ (\S+?)ごろ \$([\d.]+)へ/);
+  return m ? `次の値下げ ${m[1]}ごろ（約1,000円下げて $${m[2]}）` : "";
+}
+function camOpenRows(v) {
+  const old = Date.now() - 7 * 86400000;
+  return (v || []).map((r, i) => ({ r, row: i + 1 })).filter(x => x.row >= 2 && String(c(x.r, K.st)).trim()
+    && !/^(出品済|やめた)/.test(c(x.r, K.st)) && new Date(String(c(x.r, K.when)).replace(/\//g, "-").replace(" ", "T")).getTime() > old);
+}
+function camCard(x) {
+  const st = String(c(x.r, K.st)), busy = /^(判定待ち|判定中|再計算|出品する|出品中)/.test(st);
+  return `<div class="card ci" onclick="camOpen(${x.row})"><div class="row"><div class="grow"><div class="t">カメラ出品 ${esc(c(x.r, K.model) || "")}</div>
+    <div class="s">${busy ? "AIが作業中です" : esc(st)}・${esc(c(x.r, K.when))}</div></div><span class="chip blue">${busy ? "待つ" : "見る"}</span></div></div>`;
+}
+function camClose() { clearTimeout(camTimer); camTimer = null; sheetClose(); }
+function camStart() { camShots = []; camNo = ""; camCost = ""; camForm(); }
+function camForm() {
+  const dev = ((cache["ジャンク品在庫"] || {}).v || []).map((r, i) => ({ r, row: i + 1 })).filter(x => x.row >= 2 && String(c(x.r, J.no)).trim() && !truthy(c(x.r, J.done)));
+  const ic = d => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  sheetOpen(`<div class="shh"><div class="t">カメラ出品</div><button class="x" onclick="camClose()">閉じる</button></div>
+    <div class="s">ガラケーを数枚撮ってください。<br>電池パックを外した所の型番シールも1枚撮ってください。</div>
+    <div class="camg">${camShots.map((x, k) => `<div class="camt"><img src="${x.url}" alt=""><button onclick="camShots.splice(${k},1);camForm()">×</button></div>`).join("")}
+      <button class="camadd" onclick="$('#camin').click()">${ic('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1V9a1 1 0 011-1z"/><circle cx="12" cy="13" r="3.5"/>')}撮る</button>
+      <button class="camadd" onclick="$('#camlib').click()">${ic('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>')}写真から</button></div>
+    <div class="s" style="margin-top:14px">仕入れ値（買った値段。<br>直した物は部品代込み）</div>
+    ${dev.length ? `<select onchange="camDev(this.value)"><option value="">ジャンク品在庫から選ぶ</option>${dev.map(x => `<option value="${x.row}" ${camNo && camNo === c(x.r, J.no) ? "selected" : ""}>${esc(c(x.r, J.no))} ${esc(c(x.r, J.model))} ${esc(c(x.r, J.color))}（${fmt(yen(c(x.r, J.cost)))}）</option>`).join("")}</select>` : ""}
+    <input class="camin" id="cam_cost" type="number" inputmode="numeric" placeholder="円" value="${esc(camCost)}" oninput="camCost=this.value">
+    <button class="full" style="width:100%;margin-top:14px;height:46px" onclick="camSend()" ${camShots.length ? "" : "disabled"}>AIに判定してもらう（${camShots.length}枚）</button>`);
+}
+function camDev(row) {
+  const r = (((cache["ジャンク品在庫"] || {}).v || [])[Number(row) - 1]) || [];
+  camNo = row ? String(c(r, J.no)).trim() : ""; if (row) camCost = String(yen(c(r, J.cost)) || "");
+  camForm();
+}
+async function camAdd(files) {
+  for (const f of [...(files || [])].slice(0, 12 - camShots.length)) { const x = await camShrink(f); if (x) camShots.push(x); }
+  camForm();
+}
+function camShrink(f) {   // 長い辺1600pxのJPEGにして送る（送る量を減らす）
+  return new Promise(res => {
+    const u = URL.createObjectURL(f), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+      cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+      cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+      const d = cv.toDataURL("image/jpeg", 0.85); URL.revokeObjectURL(u); res({ url: d, b64: d.split(",")[1] });
+    };
+    im.onerror = () => { URL.revokeObjectURL(u); toast("読めない写真がありました"); res(null); };
+    im.src = u;
+  });
+}
+function camWaitView(msg) {
+  sheetOpen(`<div class="shh"><div class="t">カメラ出品</div><button class="x" onclick="camClose()">閉じる</button></div>
+    <div class="camspin"></div><div class="s" style="text-align:center;line-height:1.7">${msg}</div>`);
+}
+async function camSend() {
+  const cost = Number(camCost) || 0;
+  if (!camShots.length) return toast("写真を撮ってください");
+  if (!cost && !confirm("仕入れ値が0円です。\nこのまま判定しますか？")) return;
+  camWaitView("写真を送っています。");
+  try {
+    const r = await call("cam_new", { photos: camShots.map(x => x.b64), cost, no: camNo });
+    camLocal[r.row] = camShots.map(x => x.url);
+    camWatch(r.row, r.started ? "AIが判定しています。<br>数分かかります。<br>閉じても大丈夫です（在庫管理の一番上に出ます）。"
+      : "判定の呼び出しに失敗しました。<br>30分以内の自動実行で判定します。<br>閉じても大丈夫です。");
+  } catch (e) { toast(e.message); camForm(); }
+}
+function camWatch(row, msg) {
+  camWaitView(msg); clearTimeout(camTimer);
+  const t0 = Date.now();
+  const tick = async () => {
+    let v = [];
+    try { v = await tab("カメラ出品", true); } catch (e) {}
+    if (!$("#sheet.on")) return;
+    const st = String(c(v[row - 1], K.st));
+    if (st && !/^(判定待ち|判定中|再計算|出品する|出品中)/.test(st)) {
+      if (st === "出品済") { camClose(); toast("eBayに出品しました"); render(true); return; }
+      return camResult(row);
+    }
+    if (Date.now() - t0 < 6 * 60000) camTimer = setTimeout(tick, 6000);
+    else camWaitView("まだ終わっていません。<br>在庫管理の一番上から、あとで確かめられます。");
+  };
+  camTimer = setTimeout(tick, 8000);
+}
+function camOpen(row) {
+  const r = ((cache["カメラ出品"] || {}).v || [])[row - 1] || [];
+  if (/^(判定待ち|判定中|再計算|出品する|出品中)/.test(String(c(r, K.st)))) return camWatch(row, "AIが作業中です。<br>終わったら結果が出ます。");
+  camResult(row);
+}
+function camResult(row) {
+  const r = ((cache["カメラ出品"] || {}).v || [])[row - 1] || [], st = String(c(r, K.st));
+  camRk = String(c(r, K.rank)) || "B"; camDirty = false;
+  const fail = /^(判定できず|出品できず)/.test(st), junk = !["S", "A", "B", "C"].includes(camRk), usd = yen(c(r, K.usd));
+  const pics = camLocal[row] || [];
+  const f = (id, label, v, ph, type = "text") => `<label><span class="s">${label}</span><input id="${id}" type="${type}" ${type === "number" ? 'inputmode="numeric"' : ""} value="${esc(v)}" placeholder="${ph}" oninput="camEdit()"></label>`;
+  sheetOpen(`<div class="shh"><div class="t">判定結果</div><button class="x" onclick="camClose()">閉じる</button></div>
+    ${pics.length ? `<div class="camg">${pics.slice(0, 6).map(u => `<div class="camt"><img src="${u}" alt=""></div>`).join("")}</div>` : ""}
+    ${fail ? `<div class="camwarn" style="background:var(--redbg);color:var(--red)">${esc(st)}</div>` : ""}
+    ${usd ? `<div class="campr"><div class="s">出品価格</div><div class="hnum">${fmt(yen(c(r, K.yen)))}</div>
+      <div class="s">$${usd.toFixed(2)}・想定利益 <b style="color:var(--acc)">${fmt(yen(c(r, K.profit)))}</b></div></div>` : ""}
+    <div class="g2f">${f("cm_model", "機種", c(r, K.model), "903KC")}${f("cm_color", "色", c(r, K.color), "シルバー")}</div>
+    <div class="s" style="margin-top:10px">状態ランク</div>
+    <div class="seg" style="margin-top:6px">${["S", "A", "B", "C", "ジャンク"].map(k => `<button class="${k === camRk ? "on" : ""}" onclick="camRk='${k}';this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this));camEdit()">${k}</button>`).join("")}</div>
+    ${c(r, K.note) ? `<div class="s" style="margin-top:10px">気になる点</div><div class="cambox">${esc(c(r, K.note))}</div>` : ""}
+    ${c(r, K.title) ? `<div class="s" style="margin-top:10px">英語タイトル</div><div class="cambox">${esc(c(r, K.title))}</div>` : ""}
+    <div class="g2f">${f("cm_cost", "仕入れ値（円）", yen(c(r, K.cost)) || "", "0", "number")}<label><span class="s">管理番号</span><input value="${esc(c(r, K.no) || "新しく付けます")}" disabled></label></div>
+    ${c(r, K.why) ? `<div class="s" style="margin-top:10px;line-height:1.6">値段の根拠：${esc(c(r, K.why))}</div>` : ""}
+    ${c(r, K.res) ? `<div class="s" style="margin-top:6px;line-height:1.6">${esc(c(r, K.res))}</div>` : ""}
+    <div class="camwarn">出品後は、1週間ごとに約1,000円ずつ値下げします。<br>利益が残る値段より下には下げません。<br>値下げの前に、在庫管理のカードに次の値下げの日が出ます。</div>
+    <button class="full" id="camgo" style="width:100%;margin-top:14px;height:46px" onclick="camGo(${row})" ${junk || !usd ? "disabled" : ""}>${junk ? "ジャンクは出品しません" : usd ? "出品する" : "計算し直す"}</button>
+    <button class="camstop" onclick="camStop(${row})">出品しない</button>`);
+  if (!junk && !usd && !fail) camEdit();
+}
+function camEdit() {
+  camDirty = true;
+  const b = $("#camgo"); if (!b) return;
+  const junk = !["S", "A", "B", "C"].includes(camRk);
+  b.disabled = junk; b.textContent = junk ? "ジャンクは出品しません" : "計算し直す";
+}
+async function camGo(row) {
+  const r = ((cache["カメラ出品"] || {}).v || [])[row - 1] || [];
+  const fields = { model: $("#cm_model").value.trim().toUpperCase(), color: $("#cm_color").value.trim(), rank: camRk, cost: Number($("#cm_cost").value) || 0 };
+  if (!fields.model) return toast("機種を入れてください");
+  if (!camDirty && !confirm(`この値段で出品しますか？\n${fmt(yen(c(r, K.yen)))}（$${yen(c(r, K.usd)).toFixed(2)}）・想定利益 ${fmt(yen(c(r, K.profit)))}\n1週間ごとに約1,000円下げます。`)) return;
+  const mode = camDirty ? "calc" : "list";
+  try {
+    const x = await call("cam_go", { row, mode, fields });
+    camWatch(row, (mode === "list" ? "eBayに出品しています。" : "値段を計算し直しています。") + "<br>数分かかります。<br>閉じても大丈夫です。"
+      + (x.started ? "" : "<br>（呼び出しに失敗したので、30分以内の自動実行で進めます）"));
+  } catch (e) { toast(e.message); }
+}
+async function camStop(row) {
+  if (!confirm("この写真は出品しません。\nよろしいですか？")) return;
+  try { await call("cam_go", { row, mode: "stop" }); camClose(); toast("やめました"); render(true); } catch (e) { toast(e.message); }
+}
+
+// ---- 通知（ホーム画面のハコペンに直接届く。2026/11/12、フクリと同じ形） ----
+const VAPID = "BN8dxqEe-KPCnqSkX6NHSMxg-5J69LFGKb_oLsptLLJJwWhk0TFG-TiLbVcJLAusrzLHYTMAVQSLQ3ct6B4mR4A";
+const N_KINDS = [["売れた", 2, "eBayで売れたとき"], ["メッセージ", 3, "買い手からメッセージが来たとき"], ["発送", 4, "発送が止まった・確認待ちのとき"], ["集荷", 5, "集荷の日の朝"]];
+let swReg = null, bell = null;
+const b64u = s => { const p = "=".repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...r].map(ch => ch.charCodeAt(0))); };
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(r => { swReg = r; bellState(); }).catch(() => {});
+if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => { if (e.data && e.data.tab) location.hash = e.data.tab; });
+async function mySub() { try { const r = swReg || await navigator.serviceWorker.getRegistration(); return r && await r.pushManager.getSubscription(); } catch (e) { return null; } }
+async function bellState() {
+  const s = await mySub(), on = !!s && window.Notification && Notification.permission === "granted";
+  if (on !== bell) { bell = on; if ((location.hash || "").startsWith("#settings") && !$("#sheet.on")) render(false, true); }
+  return on;
+}
+function notifyCard() {   // 設定の一番上：押すと通知の設定が下から開く
+  const v = (cache["通知"] || {}).v || [], n = N_KINDS.filter(([, r]) => String(c(v[r - 1], 2)).toUpperCase() !== "FALSE").length;
+  return `<div class="card nrow" onclick="notifySheet()"><div class="row"><span class="nic">${svgI("M6 8a6 6 0 1112 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 004 0")}</span>
+    <div class="grow"><div class="t">通知</div><div class="s">${bell ? `この端末で受け取り中・${n}種類オン` : "この端末はオフ"}</div></div>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="chev"><path d="M9 6l6 6-6 6"/></svg></div></div>`;
+}
+function hiddenCard() {   // 非表示のトークの一覧へ（元に戻せる・選択もできる）
+  const v = (cache["買い手メッセージ"] || {}).v || [], th = {};
+  v.forEach((r, i) => { if (i < 1 || !String(c(r, B.when)).trim() || String(c(r, B.state)).startsWith("削除")) return; (th[tkey(r)] = th[tkey(r)] || []).push(r); });
+  const n = Object.values(th).filter(t => t.every(r => String(c(r, B.read)).includes("非表示"))).length;
+  return `<div class="card nrow" onclick="location.hash='settings/hidden'"><div class="row"><span class="nic" style="background:#636366">${svgI("M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c5 0 9 4.5 10 7a13 13 0 01-2.6 3.6M6.6 6.6C4.4 8 2.8 10.2 2 12c1 2.5 5 7 10 7a9.6 9.6 0 004.4-1.1")}</span>
+    <div class="grow"><div class="t">非表示のトーク</div><div class="s">${n ? n + "件・押すと一覧から元に戻せます" : "ありません"}</div></div>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="chev"><path d="M9 6l6 6-6 6"/></svg></div></div>`;
+}
+// ---- 除外者リスト（2026/11/12）：この出品者の商品は候補・出品にしない。設定から見る・足す・外す ----
+function blockRows() { const v = (cache["除外者リスト"] || {}).v || []; return v.map((r, i) => ({ row: i + 1, r })).filter(x => x.row > 1 && String(x.r[1] || "").trim()); }
+// ---- 経費（2026/11/13 本人の希望）：設定の通知の下。押すと経費の一覧が下から出て、追加・削除ができる ----
+function expRows() { const v = (cache["経費"] || {}).v || []; return v.map((r, i) => ({ row: i + 1, r })).filter(x => x.row > 5 && String(x.r[0] || "").trim() && yen(x.r[2])); }
+function expCard() {
+  const L = expRows(), now = new Date(), pre = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const mon = L.filter(x => String(x.r[0]).startsWith(pre)).reduce((a, x) => a + yen(x.r[2]), 0);
+  return `<div class="card nrow" onclick="expListSheet()"><div class="row"><span class="nic" style="background:#E8833A">${svgI("M4 7h16v12H4zM4 7l2-3h12l2 3M9 12h6")}</span>
+    <div class="grow"><div class="t">経費</div><div class="s">${L.length ? `今月 ${fmt(mon)}・全部で${L.length}件` : "まだありません"}</div></div>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="chev"><path d="M9 6l6 6-6 6"/></svg></div></div>`;
+}
+function expListSheet() {
+  const L = expRows().sort((a, b) => (String(a.r[0]) < String(b.r[0]) ? 1 : String(a.r[0]) > String(b.r[0]) ? -1 : b.row - a.row));
+  let last = "", h = "";
+  L.forEach(x => { const d = String(x.r[0]), ym = d.slice(0, 7);
+    if (ym !== last) { last = ym; const t = L.filter(z => String(z.r[0]).startsWith(ym)).reduce((a, z) => a + yen(z.r[2]), 0);
+      h += `<div class="exm"><b>${Number(ym.slice(0, 4))}年${Number(ym.slice(5))}月</b><span>${fmt(t)}</span></div>`; }
+    h += `<div class="trr exr"><span class="dt">${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}</span><span class="nm" onclick="expSheet(${x.row - 1})">${esc(x.r[1])}</span><span class="pp dn">${pmY(-yen(x.r[2]))}</span>
+      <button class="exdel" onclick="expDel(${x.row})" aria-label="削除">${svgI("M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3")}</button></div>`; });
+  sheetOpen(`<div class="shh"><div class="t">経費</div><button class="x" onclick="sheetClose()">✕</button></div>
+    <button class="full" style="width:100%;height:46px;margin-bottom:10px" onclick="expenseSheet()">＋経費を追加</button>
+    <div class="trbox" style="max-height:60vh">${h || '<div class="s" style="padding:8px 0">まだありません。</div>'}</div>`);
+}
+async function expDel(row) {
+  const r = ((cache["経費"] || {}).v || [])[row - 1] || [];
+  if (!confirm(`${r[0]} ${r[1]} ${fmt(yen(r[2]))} を削除しますか？`)) return;
+  try { await setCells("経費", [1, 2, 3, 4, 5].map(c => [row, c, ""])); toast("削除しました"); expListSheet(); render(false, true); }
+  catch (e) { toast("削除できませんでした：" + e.message); }
+}
+function blockCard() {
+  const n = blockRows().length;
+  return `<div class="card nrow" onclick="blockSheet()"><div class="row"><span class="nic" style="background:#c0392b">${svgI("M12 3a9 9 0 100 18 9 9 0 000-18zM5.6 5.6l12.8 12.8")}</span>
+    <div class="grow"><div class="t">除外者リスト</div><div class="s">${n ? n + "人・この出品者の商品は仕入れ候補・出品にしません" : "ありません"}</div></div>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="chev"><path d="M9 6l6 6-6 6"/></svg></div></div>`;
+}
+const BLOCK_WHY = ["写真の無断使用の申し立て", "連絡がつかない・更新なし", "詐欺っぽい・トラブル", "その他"];
+function blockSheet() {
+  const L = blockRows();
+  sheetOpen(`<div class="shh"><div class="t">除外者リスト</div><button class="x" onclick="sheetClose();render(false,true)">閉じる</button></div>
+    <div class="s" style="margin-bottom:10px">ここに入れた出品者の商品は、仕入れ候補・出品にしません。</div>
+    <div class="card" style="padding:4px 16px">${L.length ? L.map((x, i) => `<div class="row tgr" ${i ? "" : 'style="border-top:0"'}><div class="grow" style="min-width:0">
+      <div class="ell">${esc(x.r[2] || x.r[1])}</div><div class="s ell">${esc(x.r[0])}・${esc(x.r[3])}</div><div class="s">${esc(x.r[4])}</div></div>
+      <button class="sub" style="flex:none" onclick="unblock(${x.row})">外す</button></div>`).join("") : '<div class="s" style="padding:10px 0">まだいません。</div>'}</div>
+    <div class="s" style="margin:16px 0 6px">追加する</div>
+    <input id="bk_url" placeholder="商品のURL か 出品者のページのURL" style="width:100%;box-sizing:border-box">
+    <input id="bk_name" placeholder="名前（なくてもよい）" style="width:100%;box-sizing:border-box;margin-top:8px">
+    <div class="chips" style="margin-top:8px">${BLOCK_WHY.map((w, i) => `<button class="ck ${i ? "" : "on"}" onclick="document.querySelectorAll('#shb .ck').forEach(e=>e.classList.toggle('on',e===this))">${w}</button>`).join("")}</div>
+    <button class="full" style="width:100%;margin-top:12px;height:46px" onclick="addBlock()">追加する</button>`);
+}
+function blockSite(u) { return /shops\/product|mercari-shops/.test(u) ? "メルカリShops" : /mercari/.test(u) ? "メルカリ" : /paypayfleamarket|yahoo/.test(u) ? "Yahoo!フリマ" : /fril|rakuma/.test(u) ? "ラクマ" : "その他"; }
+async function addBlock() {
+  const u = ($("#bk_url").value || "").trim(); if (!u) { toast("URLを入れてください"); return; }
+  const why = (document.querySelector("#shb .ck.on") || {}).textContent || "その他";
+  const v = (cache["除外者リスト"] || {}).v || [];
+  let row = v.findIndex((r, i) => i > 0 && !String(r[1] || "").trim() && !String(r[0] || "").trim()) + 1; if (row < 2) row = Math.max(2, v.length + 1);
+  const d = new Date(), day = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+  const isItem = /\/item\/|\/product\//.test(u);
+  // 商品URLのときは出品者IDの欄にもURLを入れておく（ツールが商品ページから出品者を調べて置き換える）
+  await setCells("除外者リスト", [[row, 1, blockSite(u)], [row, 2, u], [row, 3, ($("#bk_name").value || "").trim()], [row, 4, why], [row, 5, day], [row, 6, isItem ? u : ""]]);
+  toast("除外者リストに追加しました"); blockSheet();
+}
+async function unblock(row) {
+  const r = (((cache["除外者リスト"] || {}).v || [])[row - 1]) || [];
+  if (!confirm(`${r[2] || r[1]} を除外者リストから外しますか？`)) return;
+  await setCells("除外者リスト", [1, 2, 3, 4, 5, 6].map(c => [row, c, ""]));
+  toast("外しました"); blockSheet();
+}
+function notifyBody() {
+  const v = (cache["通知"] || {}).v || [];
+  const sa = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  return `<div class="shh"><div class="t">通知</div><button class="x" onclick="sheetClose();render(false,true)">閉じる</button></div>
+    <div class="s" style="margin-bottom:12px">ホーム画面のハコペンに直接届きます。<br>種類ごとにオンオフできます。</div>
+    ${bell ? `<div class="card" style="padding:4px 16px">${N_KINDS.map(([k, r, d], i) => `<div class="row tgr" ${i ? "" : 'style="border-top:0"'}><div class="grow"><div>${k}</div><div class="s">${d}</div></div>
+      <button class="tg ${String(c(v[r - 1], 2)).toUpperCase() === "FALSE" ? "" : "on"}" onclick="setKind(${r},this)" aria-label="${k}"><i></i></button></div>`).join("")}</div>
+      <div class="row" style="gap:8px"><button class="sub grow" onclick="testBell()">テスト表示</button><button class="sub grow" onclick="bellOff()">この端末はオフ</button></div>`
+    : `<button style="width:100%;height:46px" onclick="bellOn()">この端末で通知を受け取る</button>${sa ? "" : `<div class="s" style="margin-top:8px">ホーム画面に追加したハコペンから押してください。</div>`}`}`;
+}
+function notifySheet() { if ($("#sheet.on")) $("#shb").innerHTML = notifyBody(); else sheetOpen(notifyBody()); }
+async function setKind(r, b) {
+  const on = !b.classList.contains("on"); b.classList.toggle("on", on);
+  try { await setCells("通知", [[r, 2, on]]); } catch (e) { b.classList.toggle("on", !on); toast(e.message); }
+}
+async function bellOn() {
+  const sa = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  if (!("PushManager" in window) || !sa) return toast("ホーム画面に追加したハコペンから押してください");
+  try {
+    if (await Notification.requestPermission() !== "granted") return toast("通知が許可されませんでした");
+    const r = swReg || await navigator.serviceWorker.ready;
+    let sub = await r.pushManager.getSubscription();
+    if (!sub) sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID) });
+    const v = await tab("通知", true), json = JSON.stringify(sub.toJSON());
+    let n = v.findIndex((x, i) => i >= 9 && String(c(x, 3)).includes(sub.endpoint)) + 1;
+    if (n < 10) { n = v.findIndex((x, i) => i >= 9 && !String(c(x, 3)).trim()) + 1; if (n < 10) n = Math.max(10, v.length + 1); }
+    const d = new Date(), dev = /iPad/.test(navigator.userAgent) ? "iPad" : /iPhone/.test(navigator.userAgent) ? "iPhone" : /Mac/.test(navigator.userAgent) ? "Mac" : "その他";
+    await setCells("通知", [[n, 1, `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`], [n, 2, dev], [n, 3, json]]);
+    bell = true; toast("通知がつながりました"); notifySheet();
+  } catch (e) { toast("通知の登録に失敗しました"); }
+}
+async function bellOff() {
+  try {
+    const sub = await mySub();
+    if (sub) {
+      const v = await tab("通知", true), n = v.findIndex((x, i) => i >= 9 && String(c(x, 3)).includes(sub.endpoint)) + 1;
+      if (n >= 10) await setCells("通知", [[n, 1, ""], [n, 2, ""], [n, 3, ""]]);
+      await sub.unsubscribe();
+    }
+    bell = false; toast("この端末の通知をオフにしました"); notifySheet();
+  } catch (e) { toast("オフにできませんでした"); }
+}
+async function testBell() {
+  try { const r = swReg || await navigator.serviceWorker.ready; await r.showNotification("ハコペン", { body: "通知はこのように届きます。", icon: "icon-180.png", tag: "test" }); }
+  catch (e) { toast("表示できませんでした"); }
+}
+// ---- 画面の切り替え（最後に押したタブだけを表示。読み込み中でも押せる） ----
+let seq = 0;
+function build(t, arg, fresh) {
+  if (t === "settings" && arg === "hidden") { hiddenView = true; return viewChat(0, fresh); }   // 非表示のトークは設定から（2026/11/12）
+  return t === "settings" ? viewSettings() : t === "stock" ? viewStock(fresh) : t === "chat" ? ((hiddenView = false), viewChat(arg && arg !== "hidden" ? Number(arg) : 0, fresh))
+    : t === "money" ? viewMoney(fresh) : viewTodo(fresh);
+}
+async function render(fresh, keepFocus) {
+  let [t, arg] = (location.hash.slice(1) || "home").split("/");
+  if (t === "todo" || t === "list") t = "home";
+  const logged = !!ss.get("session");
+  $("#nav").classList.toggle("hide", !logged);
+  if (!logged) {   // ログインするまではタブを出さず、ログイン画面だけ
+    document.body.classList.remove("talk", "room");
+    if ($("#gbtn")) return;
+    $("#app").innerHTML = `<div style="min-height:70vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+      <picture><source srcset="icon-dark.png" media="(prefers-color-scheme: dark)"><img src="icon.png" alt="" style="width:96px;height:96px;border-radius:22px;margin-bottom:16px"></picture>
+      <h1 style="margin:0 0 6px">ハコペン</h1>
+      <div class="s" style="margin-bottom:24px">管理表の持ち主のアカウントでログインしてください。<br>ほかのアカウントでは使えません。</div>
+      <div id="gbtn" style="width:260px;height:44px;overflow:hidden"></div></div>`;
+    googleButton("gbtn");
+    return;
+  }
+  const my = ++seq, view = t + "/" + (arg || "");
+  document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.t === t));
+  document.body.classList.toggle("talk", t === "chat" || (t === "settings" && arg === "hidden"));
+  document.body.classList.toggle("home-on", t === "home" || t === "stock" || t === "money");
+  document.body.classList.toggle("stock-on", t === "stock");
+  document.body.classList.toggle("room", t === "chat" && !!arg);
+  const slow = setTimeout(() => { if (my === seq) $("#pbar").classList.add("on"); }, 120);
+  try {
+    const h = await build(t, arg, fresh);
+    if (my !== seq) return;           // もっと新しく押されたタブがあれば、そちらを優先
+    const app = $("#app"), changed = render.last !== view;
+    if (!changed && !keepFocus && render.html === h) return;   // 中身が同じなら描き直さない（1分ごとの更新で重くならないように）
+    render.html = h;
+    app.innerHTML = h;
+    if (t === "chat" && arg) { const ms = app.querySelectorAll(".msg"); ms.forEach((m, i) => { if (!changed || i < ms.length - 4) m.style.animation = "none"; }); }
+    if (changed && !keepFocus) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); }
+    if (t === "home" || !t) { const w = $("#rswipe"); if (w) { requestAnimationFrame(() => goStage(stageNow, true)); w.addEventListener("scroll", onStageScroll, { passive: true }); }
+      }
+    $("#scroll").classList.toggle("noscroll", t === "money");
+    if (t === "money") moneyAfter();
+    const ib = app.querySelector(".ibar"); $("#dock").replaceChildren(...(ib ? [ib] : []));   // 入力欄は動く画面の外に置く（開いた瞬間に上から落ちてこないように）
+    if (t === "chat" && arg) { const m = $("#msg"); if (m) grow(m); if (changed) $("#scroll").scrollTop = 1e9; }
+    else if (changed && !keepFocus) $("#scroll").scrollTop = 0;
+    render.last = view;
+    if (keepFocus) { const e = $("#q"); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
+  } catch (e) {
+    if (my !== seq) return;
+    $("#app").innerHTML = `<h1>ハコペン</h1><div class="card">管理表につながりませんでした。<br>${esc(e.message).slice(0, 120)}<br><br><button onclick="render(true)">もう一度</button></div>`;
+  } finally { if (my === seq) { clearTimeout(slow); $("#pbar").classList.remove("on"); } }
+}
+window.addEventListener("hashchange", () => { sheetClose(); sel.on = false; sel.rows.clear(); render(false); });
+setInterval(() => {   // 開いている間は1分ごとに裏で最新にする（引っぱって更新の代わり）
+  if (document.hidden || !ss.get("session") || sel.on) return;
+  ["売上", "買い手メッセージ", "無在庫商品リスト", "月別収支", "ジャンク品在庫"].forEach(n => { if (cache[n]) cache[n].at = 0; refreshBg(n); });
+}, 60000);
+setInterval(() => {   // 2026/11/14 トークを開いている間は、メッセージだけ20秒ごとに見る（届いたらすぐ出す）
+  if (document.hidden || !ss.get("session") || sel.on || !location.hash.startsWith("#chat") || busyTyping()) return;
+  if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ");
+}, 20000);
+document.addEventListener("visibilitychange", () => {   // アプリに戻った瞬間にもメッセージを見る（通知から開いたとき）
+  if (document.hidden || !ss.get("session")) return;
+  if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ");
+});
+
+let swiped = false;
+(() => {   // AIの案は長押し（0.45秒）で入力欄へ。ふつうに触っただけでは何もしない
+  let t = null, el = null;
+  const end = () => { clearTimeout(t); t = null; if (el) el.classList.remove("hold"); el = null; };
+  document.addEventListener("touchstart", e => { const g = e.target.closest("#sug"); if (!g || g.classList.contains("gone")) return;
+    el = g; g.classList.add("hold"); t = setTimeout(() => { end(); if (navigator.vibrate) navigator.vibrate(15); useSug(); }, 450); }, { passive: true });
+  ["touchend", "touchmove", "touchcancel"].forEach(n => document.addEventListener(n, end, { passive: true }));
+  document.addEventListener("contextmenu", e => { if (e.target.closest("#sug")) e.preventDefault(); });
+})();
+let openSw = null;   // 左にスワイプして開いている行
+function closeSw() { if (!openSw) return; const r = openSw.querySelector(".lrow"); r.style.transform = ""; openSw.classList.remove("open", "right"); setTimeout(() => { if (!openSw || !openSw.classList.contains("open")) document.querySelectorAll(".sw.left:not(.open)").forEach(x => x.classList.remove("left")); }, 260); openSw = null; }
+function swAct(btn, k) {
+  const box = btn.closest(".sw"), rows = box.querySelector(".lrow").dataset.rows.split(",").map(Number);
+  openSw = null;
+  if (k === "unread") { const r = box.querySelector(".lrow"); r.style.transform = ""; box.classList.remove("open", "right");
+    hiddenView ? unhide(rows) : markUnread(rows); return; }
+  if (k === "del") delThread(box, rows);
+  else { box.style.height = box.offsetHeight + "px"; box.classList.add("bye"); requestAnimationFrame(() => box.style.height = "0px");
+    setTimeout(() => hiddenView ? unhide(rows) : fastSet("買い手メッセージ", rows.map(n => [n, B.read, "非表示"]), "非表示にしました"), 250); }
+}
+(() => {   // トーク一覧：右スワイプで「未読」ボタン（未読のトークは一発で既読）、左スワイプで「非表示・削除」ボタン
+  const OPEN = -90, OPENR = 90;
+  let row = null, x0 = 0, y0 = 0, dx = 0, base = 0, on = false;
+  const shut = (p, r) => { r.style.transform = ""; p.classList.remove("open", "right"); if (openSw === p) openSw = null; setTimeout(() => p.classList.remove("left"), 260); };
+  document.addEventListener("touchstart", e => {
+    if (openSw && !e.target.closest(".sw.open .swdel, .sw.open .swbg")) { if (!e.target.closest(".sw.open")) { closeSw(); swiped = true; setTimeout(() => swiped = false, 350); return; } }
+    if (e.target.closest(".swdel, .swbg")) return;
+    const r = sel.on ? null : e.target.closest(".lrow"); row = r; on = false; dx = 0;
+    if (r) { const p = r.parentNode; base = p.classList.contains("open") ? (p.classList.contains("right") ? OPENR : OPEN) : 0; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
+  document.addEventListener("touchmove", e => { if (!row) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (!on) { if (Math.abs(my) > 8 && Math.abs(my) * 1.2 > Math.abs(mx)) { row = null; return; } if (Math.abs(mx) > 24 && Math.abs(mx) > Math.abs(my) * 2) { on = true; x0 += mx > 0 ? 24 : -24; } else return; }
+    dx = Math.max(OPEN - 30, Math.min(base + mx, OPENR + 40)); row.style.transition = "none"; row.style.transform = `translateX(${dx}px)`;
+    row.parentNode.classList.toggle("left", dx < 0); }, { passive: true });
+  document.addEventListener("touchend", () => { if (!row) return; const r = row; row = null;
+    const p = r.parentNode; r.style.transition = "";
+    if (!on) { if (base) { closeSw(); swiped = true; setTimeout(() => swiped = false, 350); } return; }
+    swiped = true; setTimeout(() => swiped = false, 350);
+    const rows = r.dataset.rows.split(",").map(Number);
+    if (dx > 70 && base <= 0) {
+      if (!hiddenView && Number(p.dataset.un)) { shut(p, r); readThread(rows); return; }   // 未読→その場で既読
+      if (openSw && openSw !== p) closeSw();
+      r.style.transform = `translateX(${OPENR}px)`; p.classList.add("open", "right"); p.classList.remove("left"); openSw = p;
+    } else if (dx < -60 && base >= 0) {
+      if (openSw && openSw !== p) closeSw();
+      r.style.transform = `translateX(${OPEN}px)`; p.classList.add("open", "left"); p.classList.remove("right"); openSw = p;
+    } else if ((base > 0 && dx > 40) || (base < 0 && dx < -100)) { r.style.transform = `translateX(${base}px)`; }
+    else shut(p, r); }, { passive: true });
+})();
+async function delThread(box, rows) {   // トークを一覧から消す（シートの行も次の自動の回に消え、また入ってこない）
+  if (!confirm("このトークを削除しますか？\n元に戻せません。")) { const r = box.querySelector(".lrow"); r.style.transform = ""; box.classList.remove("open"); setTimeout(() => box.classList.remove("left"), 260); return; }
+  box.style.height = box.offsetHeight + "px"; box.classList.add("bye");
+  requestAnimationFrame(() => { box.style.height = "0px"; });
+  try { await setCells("買い手メッセージ", rows.flatMap(n => [[n, B.state, "削除"], [n, B.read, true], [n, B.send, false]])); setTimeout(() => render(false), 320); }
+  catch (e) { toast(e.message); render(false); }
+}
+function unhide(rows) { return fastSet("買い手メッセージ", rows.map(n => [n, B.read, true]), "表示に戻しました"); }
+async function markUnread(rows) {
+  const v = cache["買い手メッセージ"] && cache["買い手メッセージ"].v; if (!v) return;
+  const last = rows.filter(n => String(c(v[n - 1], B.qja) || c(v[n - 1], B.qen)).trim()).pop() || rows[rows.length - 1];
+  fastSet("買い手メッセージ", [[last, B.read, "未読"]]);
+}
+
+async function checkVersion() {
+  try { const v = (await (await fetch("version.txt?t=" + Date.now(), { cache: "no-store" })).text()).trim();
+    if (v && v !== VERSION) location.reload(); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { checkVersion(); if (ss.get("session")) render(false); } });
+checkVersion();
+render(false);
+if (ss.get("session")) ["売上", "買い手メッセージ", "無在庫商品リスト", "月別収支", "経費", "ジャンク品在庫"].forEach(n => tab(n).catch(() => {}));
+
+// 11/13 本人：下のタブが上にずれないように（フクリと同じ）。ほかのアプリから戻った時・キーボードを閉じた時・画面の高さが変わった時に、ページを一番上に戻してタブを画面の一番下に置き直す
+function fixNav(){window.scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0;
+  const n=document.getElementById('nav');if(n){n.style.top='';n.style.bottom=''}
+  if(window.fitMoney)try{fitMoney()}catch(_){}}
+const fixNavSoon=()=>[0,80,300,800].forEach(t=>setTimeout(fixNav,t));
+['load','pageshow','orientationchange','resize','focus'].forEach(ev=>addEventListener(ev,fixNavSoon));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)fixNavSoon()});
+document.addEventListener('focusout',fixNavSoon);
+if(window.visualViewport){visualViewport.addEventListener('resize',fixNav);visualViewport.addEventListener('scroll',()=>{if(!document.activeElement||!/INPUT|TEXTAREA/.test(document.activeElement.tagName))fixNav()})}
+addEventListener('scroll',()=>{if(window.scrollY&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)))fixNav()},{passive:true});
+fixNav();
+// 2026/11/14 本人：入力欄（メッセージを入力）を押したら、キーボードの上に入力欄と打っている文字が見えるようにする
+(function(){
+  let was=0;
+  function kbFit(){
+    const vv=window.visualViewport, f=document.activeElement;
+    const on=!!(vv&&f&&f.closest&&f.closest('#dock'));
+    const kb=on?Math.max(0,Math.round(window.innerHeight-(vv.offsetTop+vv.height))):0;
+    document.body.style.setProperty('--kb',kb+'px');
+    document.body.classList.toggle('kbon',kb>40);
+    if(kb>40&&!was){const sc=document.getElementById('scroll');if(sc)sc.scrollTop=1e9}
+    was=kb>40?1:0;
+  }
+  window.kbFit=kbFit;
+  if(window.visualViewport){visualViewport.addEventListener('resize',()=>requestAnimationFrame(kbFit));visualViewport.addEventListener('scroll',()=>requestAnimationFrame(kbFit))}
+  document.addEventListener('focusin',()=>[0,100,300,600].forEach(t=>setTimeout(kbFit,t)));
+  document.addEventListener('focusout',()=>[50,300].forEach(t=>setTimeout(kbFit,t)));
+})();
+</script>
+</body>
+</html>
