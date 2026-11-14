@@ -1,0 +1,53 @@
+name: 過去のログの削除（1回だけ）
+
+# 2026-11-14 非公開化に合わせて、それより前の実行記録（ログに出品番号・注文番号などが出ていた）を全部消す。
+# 終わったらこのファイルは消す。
+on:
+  push:
+    paths: [".github/workflows/cleanup_logs.yml"]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - name: 2026-11-14 16:00（日本時間）より前の実行記録を削除
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error
+          T, R = os.environ["GH_TOKEN"], os.environ["REPO"]
+          CUT = "2026-11-14T07:00:00Z"
+          H = {"Authorization": "Bearer " + T, "Accept": "application/vnd.github+json", "User-Agent": "cleanup"}
+          def call(method, url):
+              while True:
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(url, method=method, headers=H), timeout=60) as r:
+                          return r.status, (json.load(r) if method == "GET" else None)
+                  except urllib.error.HTTPError as e:
+                      if e.code in (403, 429):
+                          time.sleep(600)  # 回数の上限に当たったら10分待って続ける
+                          continue
+                      return e.code, None
+          done = fail = 0
+          while True:
+              st, d = call("GET", f"https://api.github.com/repos/{R}/actions/runs?per_page=100&created=<{CUT}")
+              runs = (d or {}).get("workflow_runs", [])
+              if not runs:
+                  break
+              for r in runs:
+                  s, _ = call("DELETE", f"https://api.github.com/repos/{R}/actions/runs/{r['id']}")
+                  if s == 204:
+                      done += 1
+                  else:
+                      fail += 1
+              if fail > 50:
+                  break
+          print(f"削除 {done} 件・失敗 {fail} 件")
+          PY
