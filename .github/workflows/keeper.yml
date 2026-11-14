@@ -1,0 +1,95 @@
+name: 起こし役（予定の実行が抜けたら代わりに起動）
+
+# 2026/11/14ごろからGitHubの「予定どおりの自動実行（schedule）」が
+# 大量に抜けるようになったため、この起こし役が5分ごとに確認して、
+# 予定時刻を過ぎても動いていない処理を代わりに起動する。
+# 約5時間50分動いたら、自分自身をもう一度起動して交代する。
+# 万一交代が途切れても、下の schedule で2時間ごとに自動で再開する。
+
+on:
+  schedule:
+    - cron: "11 */2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: keeper
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 358
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows
+      - run: pip install croniter pyyaml
+      - name: 5分ごとに確認して、抜けた処理を起動
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          cat > /tmp/keep.py <<'PY'
+          import os, json, subprocess, time, glob, yaml
+          from datetime import datetime, timezone, timedelta
+          from croniter import croniter
+          REPO = os.environ["REPO"]
+          SELF = "keeper.yml"
+          def gh(*a):
+              r = subprocess.run(["gh", *a], capture_output=True, text=True)
+              return r.returncode, r.stdout
+          def crons():
+              out = {}
+              for p in glob.glob(".github/workflows/*.yml"):
+                  name = os.path.basename(p)
+                  if name == SELF:
+                      continue
+                  try:
+                      y = yaml.safe_load(open(p, encoding="utf-8"))
+                  except Exception:
+                      continue
+                  on = y.get(True) or y.get("on") or {}
+                  if not isinstance(on, dict) or "workflow_dispatch" not in on:
+                      continue
+                  cs = [s.get("cron") for s in (on.get("schedule") or []) if isinstance(s, dict) and s.get("cron")]
+                  if cs:
+                      out[name] = cs
+              return out
+          def check(wf, cs, now):
+              prev = max(croniter(c, now).get_prev(datetime) for c in cs)
+              if now - prev < timedelta(minutes=12):   # GitHubの通常の遅れの範囲は待つ
+                  return
+              code, s = gh("api", f"repos/{REPO}/actions/workflows/{wf}/runs?per_page=5")
+              if code != 0:
+                  return
+              runs = json.loads(s).get("workflow_runs", [])
+              for r in runs:
+                  if r["status"] in ("queued", "in_progress", "waiting", "pending", "requested"):
+                      return   # 動いている／待っている
+                  t = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+                  if t >= prev - timedelta(minutes=3):
+                      return   # 予定の回はもう動いた
+              code, _ = gh("workflow", "run", wf, "-R", REPO)
+              print(f"{now:%m/%d %H:%M} 起動: {wf}（予定 {prev:%H:%M} UTC が抜けていた） code={code}", flush=True)
+          start = time.time()
+          wfs = crons()
+          print("見張る処理:", wfs, flush=True)
+          while time.time() - start < 5 * 3600 + 50 * 60:
+              now = datetime.now(timezone.utc)
+              for wf, cs in wfs.items():
+                  try:
+                      check(wf, cs, now)
+                  except Exception as e:
+                      print("確認エラー", wf, e, flush=True)
+              time.sleep(300)
+          PY
+          python3 /tmp/keep.py
+      - name: 交代（自分をもう一度起動）
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run keeper.yml -R "${{ github.repository }}" || true
