@@ -588,7 +588,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-14g";
+const VERSION = "2026-11-14h";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -1100,24 +1100,41 @@ function ptrSet(k, anim) {   // 一覧（#app）を k px 下げ、上の隙間�
   if (!k && anim) setTimeout(() => { if (!pulling) { a.classList.remove("ptrback"); p.classList.remove("back"); a.style.transform = ""; } }, 340);
 }
 let pulling = false, pullTimer = null;
-async function pullMsgs() {
-  if (pulling) return; pulling = true; ptrSet(PTR_HOLD, true); $("#ptr").classList.add("spin");
-  // 2026/11/14 本人「ぐるぐるを短く」：Xと同じく0.7秒で戻し、残りの読み込みは上の細い線で見せる
-  const rel = setTimeout(() => { ptrSet(0, true); setTimeout(() => $("#ptr").classList.remove("spin", "over"), 320); $("#pbar").classList.add("on"); }, 700);
-  try {
-    // 2026/11/14 取り込みはその場で管理表に書く形に変えた（仮の表示はやめた）→読み直すだけでトークに出る
+// 2026/11/14 本人の希望「先回りで読む」：トークを開いた時・アプリに戻った時に、裏で新着の取り込みを始めておく。
+//   引っ張ったときは、その読み込みが終わっていれば一瞬で、途中なら続きを待つだけ（Googleの動き出し1〜2秒を先に済ませる）
+let pullP = null, pullAt = 0;
+function doPull() {   // 取り込み＋読み直し（同時に2回は走らせない）。戻り値＝新しく入った件数
+  if (pullP) return pullP;
+  pullP = (async () => {
     const om = cache["買い手メッセージ"];   // 取り込みと読み直しを1回の通信で（往復を減らす）
     const res = await call("msg_pull", { tab: Object.assign({ name: "買い手メッセージ", etag: om && om.etag }, READ_OPT["買い手メッセージ"]) });
     pulled = res.items || [];
     const n0 = res.added || pulled.length;
-    if (res.added && !res.kicked) call("msg_kick").catch(() => {});   // 2026/11/14 返信案づくり（GitHub）は待たずに後ろで頼む
+    if (res.added && !res.kicked) call("msg_kick").catch(() => {});   // 返信案づくり（GitHub）は待たずに後ろで頼む
     if (res.tab) applyTab("買い手メッセージ", res.tab);
     render(false, true);
-    toast(n0 ? `新しいメッセージ${n0}件を入れました` : "新しいメッセージはありません");
     clearInterval(pullTimer);
     if (n0) { let n = 0; pullTimer = setInterval(() => {   // AIの返信案が付くまで10秒ごとに見る（最大3分）
       if (++n > 18) return clearInterval(pullTimer);
       if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ"); }, 10000); }
+    pullAt = Date.now();
+    return n0;
+  })().finally(() => { pullP = null; });
+  return pullP;
+}
+function prePull() {   // 先回り：画面は何も変えない。新着があった時だけ知らせる
+  if (!ss.get("session") || pullP || Date.now() - pullAt < 20000) return;
+  doPull().then(n => { if (n) toast(`新しいメッセージ${n}件を入れました`); }).catch(() => {});
+}
+async function pullMsgs() {
+  if (pulling) return; pulling = true; ptrSet(PTR_HOLD, true); $("#ptr").classList.add("spin");
+  // ぐるぐるは長くても0.7秒で戻し、残りは上の細い線で見せる
+  const rel = setTimeout(() => { ptrSet(0, true); setTimeout(() => $("#ptr").classList.remove("spin", "over"), 320); $("#pbar").classList.add("on"); }, 700);
+  try {
+    let n0;
+    if (!pullP && Date.now() - pullAt < 15000) { await new Promise(r => setTimeout(r, 350)); n0 = 0; }   // 先回りで今さっき見たばかり
+    else n0 = await doPull();   // 先回りの途中ならその続きを待つ
+    toast(n0 ? `新しいメッセージ${n0}件を入れました` : "新しいメッセージはありません");
   } catch (e) { toast(/gmail|権限|permission/i.test(e.message) ? "Gmailを読む許可がまだです（Macで許可が必要）" : e.message); }
   finally { clearTimeout(rel); pulling = false; $("#pbar").classList.remove("on"); ptrSet(0, true); setTimeout(() => $("#ptr").classList.remove("spin", "over"), 320); }
 }
@@ -1898,7 +1915,7 @@ async function render(fresh, keepFocus) {
     $("#app").innerHTML = `<h1>ハコペン</h1><div class="card">管理表につながりませんでした。<br>${esc(e.message).slice(0, 120)}<br><br><button onclick="render(true)">もう一度</button></div>`;
   } finally { if (my === seq) { clearTimeout(slow); $("#pbar").classList.remove("on"); } }
 }
-window.addEventListener("hashchange", () => { sheetClose(); sel.on = false; sel.rows.clear(); render(false); });
+window.addEventListener("hashchange", () => { sheetClose(); sel.on = false; sel.rows.clear(); render(false); if (location.hash.startsWith("#chat")) prePull(); });
 setInterval(() => {   // 開いている間は1分ごとに裏で最新にする（引っぱって更新の代わり）
   if (document.hidden || !ss.get("session") || sel.on) return;
   ["売上", "買い手メッセージ", "無在庫商品リスト", "月別収支", "ジャンク品在庫"].forEach(n => { if (cache[n]) cache[n].at = 0; refreshBg(n); });
@@ -1910,7 +1927,9 @@ setInterval(() => {   // 2026/11/14 トークを開いている間は、メッ�
 document.addEventListener("visibilitychange", () => {   // アプリに戻った瞬間にもメッセージを見る（通知から開いたとき）
   if (document.hidden || !ss.get("session")) return;
   if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ");
+  prePull();   // 2026/11/14 先回り：戻った瞬間に新着の取り込みも始めておく
 });
+setTimeout(() => { if (location.hash.startsWith("#chat")) prePull(); }, 1500);   // 起動時にトークが開いていたら先回り
 
 let swiped = false;
 (() => {   // AIの案は長押し（0.45秒）で入力欄へ。ふつうに触っただけでは何もしない
