@@ -67,7 +67,7 @@ nav a.on svg{animation:pop .38s var(--ease)}
 nav a{-webkit-touch-callout:none;padding:4px 0}
 .toast{transform:translate(-50%,12px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
 .toast.on{transform:translate(-50%,0)}
-#pbar{position:fixed;top:0;left:0;height:2px;width:0;background:var(--acc);z-index:20;opacity:0;transition:opacity .2s}
+#pbar{position:fixed;top:env(safe-area-inset-top);left:0;height:2px;width:0;background:var(--acc);z-index:20;opacity:0;transition:opacity .2s}
 #pbar.on{opacity:1;animation:pb 1.2s var(--ease) infinite}
 @keyframes pb{0%{width:0;left:0}50%{width:60%;left:20%}100%{width:0;left:100%}}
 /* トーク：LINEのブラック風 */
@@ -588,7 +588,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-14e";
+const VERSION = "2026-11-14f";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -1102,6 +1102,8 @@ function ptrSet(k, anim) {   // 一覧（#app）を k px 下げ、上の隙間�
 let pulling = false, pullTimer = null;
 async function pullMsgs() {
   if (pulling) return; pulling = true; ptrSet(PTR_HOLD, true); $("#ptr").classList.add("spin");
+  // 2026/11/14 本人「ぐるぐるを短く」：Xと同じく0.7秒で戻し、残りの読み込みは上の細い線で見せる
+  const rel = setTimeout(() => { ptrSet(0, true); setTimeout(() => $("#ptr").classList.remove("spin", "over"), 320); $("#pbar").classList.add("on"); }, 700);
   try {
     // 2026/11/14 取り込みはその場で管理表に書く形に変えた（仮の表示はやめた）→読み直すだけでトークに出る
     const om = cache["買い手メッセージ"];   // 取り込みと読み直しを1回の通信で（往復を減らす）
@@ -1116,7 +1118,7 @@ async function pullMsgs() {
       if (++n > 18) return clearInterval(pullTimer);
       if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ"); }, 10000); }
   } catch (e) { toast(/gmail|権限|permission/i.test(e.message) ? "Gmailを読む許可がまだです（Macで許可が必要）" : e.message); }
-  finally { pulling = false; ptrSet(0, true); setTimeout(() => $("#ptr").classList.remove("spin", "over"), 320); }
+  finally { clearTimeout(rel); pulling = false; $("#pbar").classList.remove("on"); ptrSet(0, true); setTimeout(() => $("#ptr").classList.remove("spin", "over"), 320); }
 }
 (() => {   // トークの一番上で下に引っ張ると更新（Xと同じ：一覧ごと下がる・引っ張りすぎるほど重くなる・離すと矢印がくるくるに）
   let y0 = null, x0 = 0, dy = 0;
