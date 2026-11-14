@@ -588,7 +588,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-14f";
+const VERSION = "2026-11-14g";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -1110,6 +1110,7 @@ async function pullMsgs() {
     const res = await call("msg_pull", { tab: Object.assign({ name: "買い手メッセージ", etag: om && om.etag }, READ_OPT["買い手メッセージ"]) });
     pulled = res.items || [];
     const n0 = res.added || pulled.length;
+    if (res.added && !res.kicked) call("msg_kick").catch(() => {});   // 2026/11/14 返信案づくり（GitHub）は待たずに後ろで頼む
     if (res.tab) applyTab("買い手メッセージ", res.tab);
     render(false, true);
     toast(n0 ? `新しいメッセージ${n0}件を入れました` : "新しいメッセージはありません");
