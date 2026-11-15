@@ -17,7 +17,7 @@
 <style>
 :root{--bg:#f4f3ef;--card:#fff;--text:#1d1d1b;--sub:#6b6a66;--line:rgba(0,0,0,.08);--acc:#0a7d5a;--accbg:#e1f5ee;--warn:#a35a00;--warnbg:#fdf1dc;--red:#b3261e;--redbg:#fce8e6;--blue:#185fa5;--bluebg:#e6f1fb}
 @media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#1e1e1c;--text:#f1f0ec;--sub:#a3a29c;--line:rgba(255,255,255,.1);--acc:#5dcaa5;--accbg:#0c3a2d;--warn:#f0b35a;--warnbg:#3a2a10;--red:#f19a92;--redbg:#3d1714;--blue:#85b7eb;--bluebg:#0f2a45}}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-drag:none}
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:var(--bg);color:var(--text);font-family:-apple-system,"Hiragino Sans",system-ui,sans-serif;font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 #scroll{position:fixed;inset:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 input,textarea{-webkit-user-select:text;user-select:text}
@@ -471,7 +471,7 @@ button.tg:active{transform:none}
   border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 1px rgba(255,255,255,.45),inset 0 -1px 1px rgba(0,0,0,.18),0 8px 22px rgba(0,0,0,.35);transition:transform .15s}
 .icb:active{transform:scale(.92)}
 .icb svg{width:24px;height:24px}
-@media (prefers-color-scheme:light){.icb{background:linear-gradient(160deg,rgba(255,255,255,.95),rgba(255,255,255,.55));border-color:rgba(0,0,0,.08);box-shadow:inset 0 1px 1px #fff,0 6px 18px rgba(0,0,0,.12)}}
+@media (prefers-color-scheme:light){.icb{background:linear-gradient(160deg,rgba(255,255,255,.95),rgba(255,255,255,.78));border-color:rgba(0,0,0,.08);box-shadow:inset 0 1px 1px #fff,0 6px 18px rgba(0,0,0,.12)}}
 #scroll.noscroll{overflow:hidden!important}
 .trr .pp small{font-size:10px;font-weight:600;color:var(--sub)}
 .etag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;margin-right:6px;background:var(--redbg);color:var(--red)}
@@ -573,6 +573,100 @@ button.armore{flex:none;min-height:0;height:34px;margin:2px -4px 4px;background:
   <a href="#money" data-t="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>収支表</a>
   <a href="#settings" data-t="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>設定</a>
 </nav>
+<!-- LGBAR:START 下のタブ：TimeTree風の液体ガラス（なぞるとレンズが出て、離した所を選ぶ） -->
+<style id="lgbar-css">
+nav.lg{position:fixed!important;left:16px!important;right:16px!important;top:auto!important;bottom:max(10px,calc(env(safe-area-inset-bottom) - 4px))!important;
+  height:60px!important;min-height:0!important;width:auto!important;max-width:520px;margin:0 auto!important;padding:0 4px!important;box-sizing:border-box!important;
+  display:flex!important;align-items:center!important;justify-content:space-around!important;gap:0!important;border-radius:999px!important;
+  background:rgba(40,40,43,.6)!important;-webkit-backdrop-filter:blur(22px) saturate(170%)!important;backdrop-filter:blur(22px) saturate(170%)!important;
+  border:0!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),inset 0 1px 0 rgba(255,255,255,.13),0 10px 30px rgba(0,0,0,.55)!important;
+  overflow:visible!important;transform:none!important;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  transition:transform .4s cubic-bezier(.3,1.5,.5,1)!important}
+nav.lg.hide{display:none!important}
+nav.lg::before,nav.lg::after{display:none!important}
+nav.lg.lg-drag{transform:scale(1.03)!important}
+nav.lg>.lg-it{position:relative;z-index:2;flex:1 1 0!important;width:auto!important;min-width:0;height:52px!important;margin:0!important;padding:0!important;
+  display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;
+  background:none!important;border:0!important;color:var(--lg-ink)!important;font-size:10.5px!important;font-weight:600!important;line-height:1.1!important;
+  white-space:nowrap;text-decoration:none!important;transform:none!important;transition:color .2s,opacity .12s!important;-webkit-tap-highlight-color:transparent}
+nav.lg>.lg-it svg{width:24px!important;height:24px!important;margin:0!important;animation:none!important}
+nav.lg>.lg-it.on{color:var(--lg-acc)!important}
+nav.lg.lg-drag>.lg-it.on{color:var(--lg-ink)!important}
+nav.lg.lg-drag>.lg-it.lg-hot{opacity:0}
+.lg-pill{position:absolute;z-index:1;left:0;top:4px;bottom:4px;border-radius:999px;pointer-events:none;background:var(--lg-pill);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.35),0 0 0 .5px rgba(255,255,255,.04);
+  transition:transform .5s cubic-bezier(.3,1.3,.45,1),width .5s cubic-bezier(.3,1.3,.45,1),opacity .25s}
+nav.lg.lg-drag .lg-pill{opacity:0!important}
+.lg-lens{position:absolute;z-index:3;left:0;top:50%;border-radius:999px;pointer-events:none;opacity:0;overflow:hidden;
+  transform:translate(var(--lx,0px),-50%) scale(var(--sx,1),var(--sy,1));
+  background:var(--lg-lens);-webkit-backdrop-filter:blur(16px) saturate(190%);backdrop-filter:blur(16px) saturate(190%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),inset 0 2px 3px rgba(255,255,255,.2),inset 0 -4px 8px rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.45);
+  transition:opacity .16s}
+.lg-lens::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:inset 3px 0 4px -1px rgba(90,255,190,.28),inset -3px 0 4px -1px rgba(120,140,255,.3),inset 0 -3px 4px -2px rgba(255,120,200,.18)}
+.lg-lens.on{opacity:1}
+.lg-mag{position:absolute;left:0;top:0;pointer-events:none}
+.lg-mi{position:absolute;top:4px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  color:var(--lg-ink);font-size:10.5px;font-weight:600;line-height:1.1;white-space:nowrap}
+.lg-mi svg{width:24px;height:24px;margin:0}
+.lg-mi.lg-hot{color:var(--lg-acc)}
+.lg-mi .badge,.lg-mi [class*=badge]{display:none!important}
+</style>
+<script>
+/* LGBar：nav＝下のタブ、sel＝項目、acc＝選択色。項目の選択状態は各アプリの「.on」をそのまま使う */
+function LGBar(nav,o){
+  if(!nav||nav.dataset.lg)return;nav.dataset.lg=1;
+  const its=()=>[...nav.querySelectorAll(o.sel)];
+  nav.classList.add('lg');its().forEach(e=>{e.classList.add('lg-it');e.draggable=false;e.querySelectorAll('svg,img').forEach(x=>x.setAttribute('draggable','false'))});
+  nav.style.setProperty('--lg-acc',o.acc);
+  const theme=()=>{const L=o.light&&o.light();nav.style.setProperty('--lg-ink',L?'#1d1d1f':'#F2F2F2');nav.style.setProperty('--lg-pill',L?'rgba(0,0,0,.08)':'rgba(0,0,0,.42)');
+    nav.style.setProperty('--lg-lens',L?'rgba(255,255,255,.78)':'rgba(46,46,50,.82)');
+    if(L){nav.style.setProperty('background','rgba(255,255,255,.62)','important');nav.style.setProperty('box-shadow','inset 0 0 0 1px rgba(0,0,0,.06),inset 0 1px 0 rgba(255,255,255,.8),0 8px 26px rgba(0,0,0,.14)','important')}
+    else{nav.style.removeProperty('background');nav.style.removeProperty('box-shadow')}};
+  theme();if(o.light)matchMedia('(prefers-color-scheme: light)').addEventListener('change',theme);
+  const pill=document.createElement('div');pill.className='lg-pill';nav.prepend(pill);
+  const lens=document.createElement('div');lens.className='lg-lens';const mag=document.createElement('div');mag.className='lg-mag';lens.appendChild(mag);nav.appendChild(lens);
+  const act=()=>its().find(e=>e.classList.contains('on'));
+  function place(anim){const e=act();if(!e||!nav.offsetWidth){pill.style.opacity=0;return}
+    const r=e.getBoundingClientRect(),n=nav.getBoundingClientRect(),w=Math.min(r.width-2,r.width*.98);
+    if(!anim)pill.style.transition='none';pill.style.opacity=1;pill.style.width=w+'px';pill.style.transform=`translateX(${r.left-n.left+(r.width-w)/2}px)`;
+    if(!anim){pill.offsetWidth;pill.style.transition=''}}
+  const mo=new MutationObserver(()=>{if(!drag)place(true)});its().forEach(e=>mo.observe(e,{attributes:true,attributeFilter:['class']}));
+  new ResizeObserver(()=>place(false)).observe(nav);addEventListener('resize',()=>place(false));
+  let st=null,drag=false,cx=0,tx=0,vx=0,raf=0,hide=0,prog=false,eat=0,geo=null;
+  const near=x=>{let b=null,d=1e9;its().forEach(e=>{const r=e.getBoundingClientRect(),k=Math.abs(r.left+r.width/2-x);if(k<d){d=k;b=e}});return b};
+  function build(){const n=nav.getBoundingClientRect();mag.innerHTML='';
+    its().forEach(e=>{const r=e.getBoundingClientRect(),c=document.createElement('div');c.className='lg-mi';c.innerHTML=e.innerHTML;
+      c.querySelectorAll('[id]').forEach(x=>x.removeAttribute('id'));c.style.left=(r.left-n.left)+'px';c.style.width=r.width+'px';c.dataset.k=its().indexOf(e);mag.appendChild(c)});
+    const iw=n.width/its().length;geo={n,w:Math.min(iw*1.22,118),h:n.height+14}}
+  function draw(){const {n,w,h}=geo;const x=Math.max(n.left+w/2-8,Math.min(n.right-w/2+8,cx)),lx=x-n.left-w/2;
+    const s=Math.min(Math.abs(vx)*.012,.16);
+    lens.style.width=w+'px';lens.style.height=h+'px';lens.style.setProperty('--lx',lx+'px');lens.style.setProperty('--sx',1+s);lens.style.setProperty('--sy',1-s*.6);
+    mag.style.width=n.width+'px';mag.style.height=n.height+'px';mag.style.left=(-lx)+'px';mag.style.top=((h-n.height)/2)+'px';
+    mag.style.transformOrigin=(x-n.left)+'px 50%';mag.style.transform='scale(1.2)';
+    const hot=near(x),hi=its().indexOf(hot);its().forEach(e=>e.classList.toggle('lg-hot',e===hot));[...mag.children].forEach(c=>c.classList.toggle('lg-hot',+c.dataset.k===hi))}
+  function loop(){const p=cx;cx+=(tx-cx)*.32;vx=cx-p;draw();if(drag||Math.abs(tx-cx)>.3||Math.abs(vx)>.05)raf=requestAnimationFrame(loop);else raf=0}
+  function show(x,from){clearTimeout(hide);build();cx=from??x;tx=x;vx=0;lens.style.transition='none';lens.style.setProperty('--sx',.8);lens.style.setProperty('--sy',.8);draw();
+    lens.offsetWidth;lens.style.transition='opacity .16s,transform .22s cubic-bezier(.3,1.6,.5,1)';lens.classList.add('on');if(!raf)raf=requestAnimationFrame(loop)}
+  function done(e){tx=cx=e.getBoundingClientRect().left+e.getBoundingClientRect().width/2;vx=0;draw();
+    hide=setTimeout(()=>{lens.style.transition='opacity .22s,transform .28s ease-in';lens.style.setProperty('--sx',.7);lens.style.setProperty('--sy',.62);lens.classList.remove('on');
+      setTimeout(()=>its().forEach(x=>x.classList.remove('lg-hot')),120)},drag?60:140)}
+  function pick(e){prog=true;try{(o.pick||(x=>x.click()))(e)}finally{prog=false}}
+  nav.addEventListener('click',ev=>{if(!prog&&performance.now()<eat){ev.preventDefault();ev.stopImmediatePropagation()}},true);
+  nav.addEventListener('pointerdown',ev=>{if(ev.button)return;const e=ev.target.closest('.lg-it');if(!e)return;st={x:ev.clientX,y:ev.clientY,e,from:(act()||e).getBoundingClientRect()};drag=false},{passive:true});
+  addEventListener('pointermove',ev=>{if(!st)return;const dx=ev.clientX-st.x;
+    if(!drag&&Math.abs(dx)>6){drag=true;nav.classList.add('lg-drag');const f=st.from;show(ev.clientX,f.left+f.width/2)}
+    if(drag){tx=ev.clientX;if(!raf)raf=requestAnimationFrame(loop)}},{passive:true});
+  const up=ev=>{if(!st)return;const s=st;st=null;
+    if(drag){const e=near(tx);eat=performance.now()+500;nav.classList.remove('lg-drag');done(e);drag=false;pick(e)}
+    else if(ev.type==='pointerup'){show(s.e.getBoundingClientRect().left+s.e.getBoundingClientRect().width/2);done(s.e)}};
+  addEventListener('pointerup',up,{passive:true});addEventListener('pointercancel',up,{passive:true});
+  requestAnimationFrame(()=>place(false));
+  return{sync:()=>place(true)};
+}
+</script>
+<!-- LGBAR:END -->
+<script>LGBar(document.getElementById('nav'),{sel:'a',acc:'var(--acc)',light:()=>matchMedia('(prefers-color-scheme: light)').matches})</script>
 <div id="pbar"></div><div id="ptr"><svg class="ar" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M5 13l7 7 7-7"/></svg><svg class="sp" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9" opacity=".2"/><path d="M21 12a9 9 0 00-9-9"/></svg></div>
 <div class="toast" id="toast"></div>
 <div id="sheet" onclick="if(event.target===this)sheetClose()"><div id="shb"></div></div>
@@ -588,7 +682,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16b";
+const VERSION = "2026-11-16c";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
