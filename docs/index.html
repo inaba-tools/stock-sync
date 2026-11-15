@@ -588,7 +588,7 @@ nav.lg.lg-drag{transform:scale(1.03)!important}
 nav.lg>.lg-it{position:relative;z-index:2;flex:1 1 0!important;width:auto!important;min-width:0;height:52px!important;margin:0!important;padding:0!important;
   display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;
   background:none!important;border:0!important;color:var(--lg-ink)!important;font-size:10.5px!important;font-weight:600!important;line-height:1.1!important;
-  white-space:nowrap;text-decoration:none!important;transform:none!important;transition:color .2s,opacity .12s!important;-webkit-tap-highlight-color:transparent}
+  white-space:nowrap;text-decoration:none!important;transform:none!important;transition:color .2s,opacity .12s!important;-webkit-tap-highlight-color:transparent;-webkit-user-drag:none}
 nav.lg>.lg-it svg{width:24px!important;height:24px!important;margin:0!important;animation:none!important}
 nav.lg>.lg-it.on{color:var(--lg-acc)!important}
 nav.lg.lg-drag>.lg-it.on{color:var(--lg-ink)!important}
@@ -623,16 +623,16 @@ function LGBar(nav,o){
     nav.style.setProperty('--lg-lens',L?'rgba(255,255,255,.78)':'rgba(46,46,50,.82)');
     if(L){nav.style.setProperty('background','rgba(255,255,255,.62)','important');nav.style.setProperty('box-shadow','inset 0 0 0 1px rgba(0,0,0,.06),inset 0 1px 0 rgba(255,255,255,.8),0 8px 26px rgba(0,0,0,.14)','important')}
     else{nav.style.removeProperty('background');nav.style.removeProperty('box-shadow')}};
-  theme();if(o.light)matchMedia('(prefers-color-scheme: light)').addEventListener('change',theme);
+  theme();if(o.light&&!LGBar.mq){LGBar.mq=1;matchMedia('(prefers-color-scheme: light)').addEventListener('change',()=>LGBar.th&&LGBar.th())}LGBar.th=theme;
   const pill=document.createElement('div');pill.className='lg-pill';nav.prepend(pill);
   const lens=document.createElement('div');lens.className='lg-lens';const mag=document.createElement('div');mag.className='lg-mag';lens.appendChild(mag);nav.appendChild(lens);
-  const act=()=>its().find(e=>e.classList.contains('on'));
+  const isOn=o.on||(e=>e.classList.contains('on'));const act=()=>its().find(isOn);
   function place(anim){const e=act();if(!e||!nav.offsetWidth){pill.style.opacity=0;return}
     const r=e.getBoundingClientRect(),n=nav.getBoundingClientRect(),w=Math.min(r.width-2,r.width*.98);
-    if(!anim)pill.style.transition='none';pill.style.opacity=1;pill.style.width=w+'px';pill.style.transform=`translateX(${r.left-n.left+(r.width-w)/2}px)`;
+    if(!anim)pill.style.transition='none';pill.style.opacity=1;pill.style.width=w+'px';pill.style.transform=`translateX(${r.left-n.left+(r.width-w)/2}px)`;LGBar.last={w:pill.style.width,t:pill.style.transform};
     if(!anim){pill.offsetWidth;pill.style.transition=''}}
-  const mo=new MutationObserver(()=>{if(!drag)place(true)});its().forEach(e=>mo.observe(e,{attributes:true,attributeFilter:['class']}));
-  new ResizeObserver(()=>place(false)).observe(nav);addEventListener('resize',()=>place(false));
+  const mo=new MutationObserver(()=>{if(!drag)place(true)});its().forEach(e=>mo.observe(e,{attributes:true,attributeFilter:['class','aria-current']}));
+  if(LGBar.ro)LGBar.ro.disconnect();if(LGBar.mo)LGBar.mo.disconnect();LGBar.mo=mo;LGBar.ro=new ResizeObserver(()=>place(false));LGBar.ro.observe(nav);
   let st=null,drag=false,cx=0,tx=0,vx=0,raf=0,hide=0,prog=false,eat=0,geo=null;
   const near=x=>{let b=null,d=1e9;its().forEach(e=>{const r=e.getBoundingClientRect(),k=Math.abs(r.left+r.width/2-x);if(k<d){d=k;b=e}});return b};
   function build(){const n=nav.getBoundingClientRect();mag.innerHTML='';
@@ -651,17 +651,20 @@ function LGBar(nav,o){
   function done(e){tx=cx=e.getBoundingClientRect().left+e.getBoundingClientRect().width/2;vx=0;draw();
     hide=setTimeout(()=>{lens.style.transition='opacity .22s,transform .28s ease-in';lens.style.setProperty('--sx',.7);lens.style.setProperty('--sy',.62);lens.classList.remove('on');
       setTimeout(()=>its().forEach(x=>x.classList.remove('lg-hot')),120)},drag?60:140)}
-  function pick(e){prog=true;try{(o.pick||(x=>x.click()))(e)}finally{prog=false}}
+  function pick(e){if(drag||st===null){const r=e.getBoundingClientRect(),n=nav.getBoundingClientRect(),w=r.width*.98;LGBar.last={w:w+'px',t:`translateX(${r.left-n.left+(r.width-w)/2}px)`}}prog=true;try{(o.pick||(x=>x.click()))(e)}finally{prog=false}}
   nav.addEventListener('click',ev=>{if(!prog&&performance.now()<eat){ev.preventDefault();ev.stopImmediatePropagation()}},true);
   nav.addEventListener('pointerdown',ev=>{if(ev.button)return;const e=ev.target.closest('.lg-it');if(!e)return;st={x:ev.clientX,y:ev.clientY,e,from:(act()||e).getBoundingClientRect()};drag=false},{passive:true});
-  addEventListener('pointermove',ev=>{if(!st)return;const dx=ev.clientX-st.x;
+  const move=ev=>{if(!st)return;const dx=ev.clientX-st.x;
     if(!drag&&Math.abs(dx)>6){drag=true;nav.classList.add('lg-drag');const f=st.from;show(ev.clientX,f.left+f.width/2)}
-    if(drag){tx=ev.clientX;if(!raf)raf=requestAnimationFrame(loop)}},{passive:true});
+    if(drag){tx=ev.clientX;if(!raf)raf=requestAnimationFrame(loop)}};
   const up=ev=>{if(!st)return;const s=st;st=null;
     if(drag){const e=near(tx);eat=performance.now()+500;nav.classList.remove('lg-drag');done(e);drag=false;pick(e)}
     else if(ev.type==='pointerup'){show(s.e.getBoundingClientRect().left+s.e.getBoundingClientRect().width/2);done(s.e)}};
-  addEventListener('pointerup',up,{passive:true});addEventListener('pointercancel',up,{passive:true});
-  requestAnimationFrame(()=>place(false));
+  LGBar.h={move,up,rs:()=>place(false)};
+  if(!LGBar.bound){LGBar.bound=1;addEventListener('pointermove',e=>LGBar.h.move(e),{passive:true});addEventListener('pointerup',e=>LGBar.h.up(e),{passive:true});
+    addEventListener('pointercancel',e=>LGBar.h.up(e),{passive:true});addEventListener('resize',()=>LGBar.h.rs())}
+  if(o.memo&&LGBar.last){pill.style.transition='none';pill.style.opacity=1;pill.style.width=LGBar.last.w;pill.style.transform=LGBar.last.t;pill.offsetWidth;pill.style.transition='';requestAnimationFrame(()=>place(true))}
+  else requestAnimationFrame(()=>place(false));
   return{sync:()=>place(true)};
 }
 </script>
@@ -682,7 +685,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16c";
+const VERSION = "2026-11-16d";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
