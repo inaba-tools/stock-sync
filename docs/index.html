@@ -588,7 +588,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16a";
+const VERSION = "2026-11-16b";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -1122,8 +1122,8 @@ function doPull() {   // 取り込み＋読み直し（同時に2回は走らせ
   })().finally(() => { pullP = null; });
   return pullP;
 }
-function prePull() {   // 先回り：画面は何も変えない。新着があった時だけ知らせる
-  if (!ss.get("session") || pullP || Date.now() - pullAt < 20000) return;
+function prePull(gap) {   // 先回り：画面は何も変えない。新着があった時だけ知らせる
+  if (!ss.get("session") || pullP || Date.now() - pullAt < (gap || 5000)) return;
   doPull().then(n => { if (n) toast(`新しいメッセージ${n}件を入れました`); }).catch(() => {});
 }
 async function pullMsgs() {
@@ -1926,8 +1926,8 @@ setInterval(() => {   // 開いている間は1分ごとに裏で最新にする
 }, 60000);
 setInterval(() => {   // 2026/11/14 トークを開いている間は、メッセージだけ20秒ごとに見る（届いたらすぐ出す）
   if (document.hidden || !ss.get("session") || sel.on || !location.hash.startsWith("#chat") || busyTyping()) return;
-  if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ");
-}, 20000);
+  prePull(10000);   // 2026/11/16 読み直しだけでなく取り込みも（eBayで直接送った自分の文・届いたメッセージをすぐ出す）。読み直しも同じ1往復
+}, 10000);
 document.addEventListener("visibilitychange", () => {   // アプリに戻った瞬間にもメッセージを見る（通知から開いたとき）
   if (document.hidden || !ss.get("session")) return;
   if (cache["買い手メッセージ"]) cache["買い手メッセージ"].at = 0; refreshBg("買い手メッセージ");
