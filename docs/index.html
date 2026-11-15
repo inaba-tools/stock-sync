@@ -588,7 +588,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-14h";
+const VERSION = "2026-11-16a";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -1239,24 +1239,28 @@ function liveEn() {
     try { const en = await toEn(ja); if ($("#msg") && $("#msg").value.trim() === ja) { } } catch (er) {}
   }, 900);
 }
-async function sendMsg(row) {
+async function sendMsg(row) {   // 2026/11/16 押したらすぐ吹き出しを出し、送るのは裏で（輸出帳がその場でeBayへ送る）
   const ja = $("#msg").value.trim(); if (!ja) return toast("文章を入れてください");
-  const b = $("#sendb");
-  b.disabled = true;
+  const en = lastEn.ja === ja ? lastEn.en : "";   // 訳がまだなら輸出帳が訳す（往復を1回減らす）
+  let n = row, cells;
+  if (row) cells = [[row, B.ren, en], [row, B.rja, ja], [row, B.send, true]];
+  else {   // 返信する質問がないときは、新しいメッセージとして1行足す
+    const v = cache["買い手メッセージ"].v, me = room.me, d = new Date();
+    n = v.findIndex((r, i) => i > 0 && !String(r[0] || "").trim()) + 1; if (n < 2) n = v.length + 1;   // A列が空の最初の行
+    const when = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const vals = [when, c(me, B.title), c(me, B.item), c(me, B.buyer), "", "", en, ja, true, "未送信", "new:" + Date.now(), true];
+    cells = vals.map((x, i) => [n, i + 1, x]);
+  }
+  setLocal("買い手メッセージ", cells); lastEn = { ja: "", en: "" };
+  writing["買い手メッセージ"] = (writing["買い手メッセージ"] || 0) + 1;   // 送り終わるまで裏の読み直しで吹き出しが消えないように
+  render(false);
   try {
-    if (lastEn.ja !== ja) await toEn(ja);
-    if (row) await setCells("買い手メッセージ", [[row, B.ren, lastEn.en], [row, B.rja, ja], [row, B.send, true]]);
-    else {   // 返信する質問がないときは、新しいメッセージとして1行足す（30分以内にeBayから送る）
-      const v = cache["買い手メッセージ"].v, me = room.me, d = new Date();
-      let n = v.findIndex((r, i) => i > 0 && !String(r[0] || "").trim()) + 1; if (n < 2) n = v.length + 1;   // A列が空の最初の行
-      const when = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      const vals = [when, c(me, B.title), c(me, B.item), c(me, B.buyer), "", "", lastEn.en, ja, true, "未送信", "new:" + Date.now(), true];
-      await setCells("買い手メッセージ", vals.map((x, i) => [n, i + 1, x]));
-    }
-    let quick = false;
-    try { quick = !!(await call("msg_send")).kicked; } catch (er) {}
-    toast(quick ? "送信待ちにしました。1〜2分で送られます" : "送信待ちにしました。30分以内に送られます"); lastEn = { ja: "", en: "" }; render(false);
-  } catch (e) { b.disabled = false; toast(e.message); }
+    const r = await call("msg_send", { cells, row: n });
+    if (r.sent) setLocal("買い手メッセージ", [[n, B.state, r.state]]);
+    if (cache["買い手メッセージ"]) { cache["買い手メッセージ"].at = 0; ss.set("c:買い手メッセージ", JSON.stringify(cache["買い手メッセージ"])); }
+    if (!r.sent) toast(r.kicked ? "送信待ちにしました。1〜2分で送られます" : "送信待ちにしました。30分以内に送られます");
+  } catch (e) { toast("送れませんでした：" + e.message); }
+  finally { writing["買い手メッセージ"]--; render(false); }
 }
 
 // ---- お金 ----
