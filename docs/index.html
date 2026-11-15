@@ -95,7 +95,7 @@ body.talk nav{background:#000}
 .msg.me .bubble{background:#3f9d4b;color:#f3fff1;border-top-right-radius:4px}
 .msg time{font-size:10.5px;color:var(--sub);flex:none;margin-bottom:2px;text-align:right;line-height:1.3}
 .bubble .en{font-size:12px;opacity:.7;margin-top:5px;padding-top:5px;border-top:.5px solid rgba(255,255,255,.18)}
-body.room nav{display:none}
+body.room nav,body.room nav.lg{display:none!important}
 body.room main{padding-bottom:calc(env(safe-area-inset-bottom) + 150px)}
 .ibar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#111;border-top:.5px solid var(--line);padding:8px 10px calc(env(safe-area-inset-bottom) + 8px)}
 .ibar .in{max-width:560px;margin:0 auto}
@@ -686,7 +686,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16f";
+const VERSION = "2026-11-16g";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -1151,7 +1151,8 @@ async function viewChat(row, fresh) {
   if (!me || row < 2) return `<div class="rh"><button class="back" onclick="location.hash='chat'">‹</button><div class="t">トーク</div></div><div class="empty">見つかりません（返信が送られて消えた可能性）</div>`;
   const t = all.filter(x => tkey(x.r) === tkey(me));
   const lk = links(d, c(me, B.item));
-  const open = t.filter(x => !truthy(c(x.r, B.send)) && !replied(x.r)).pop();
+  const open0 = t.filter(x => !truthy(c(x.r, B.send)) && !replied(x.r)).pop();
+  const open = open0 && !t.slice(t.indexOf(open0) + 1).some(x => replied(x.r)) ? open0 : null;   // 2026/11/16 eBayで直接返したら、その前のAIの案は出さない
   markRead(t); room = { t, me, open };
   let day = "", body = "";
   t.forEach(x => {
