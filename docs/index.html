@@ -646,7 +646,7 @@ function LGBar(nav,o){
     mag.style.width=n.width+'px';mag.style.height=n.height+'px';mag.style.left=(-lx)+'px';mag.style.top=((h-n.height)/2)+'px';
     mag.style.transformOrigin=(x-n.left)+'px 50%';mag.style.transform='scale(1.2)';
     const hot=near(x),hi=its().indexOf(hot);its().forEach(e=>e.classList.toggle('lg-hot',e===hot));[...mag.children].forEach(c=>c.classList.toggle('lg-hot',+c.dataset.k===hi))}
-  function loop(){const p=cx;cx+=(tx-cx)*.32;vx=cx-p;draw();if(drag||Math.abs(tx-cx)>.3||Math.abs(vx)>.05)raf=requestAnimationFrame(loop);else raf=0}
+  function loop(){const p=cx;cx+=(tx-cx)*(drag?.78:.34);vx=cx-p;draw();if(drag||Math.abs(tx-cx)>.3||Math.abs(vx)>.05)raf=requestAnimationFrame(loop);else raf=0}
   function show(x,from){clearTimeout(hide);build();cx=from??x;tx=x;vx=0;lens.style.transition='none';lens.style.setProperty('--sx',.8);lens.style.setProperty('--sy',.8);draw();
     lens.offsetWidth;lens.style.transition='opacity .16s,transform .22s cubic-bezier(.3,1.6,.5,1)';lens.classList.add('on');if(!raf)raf=requestAnimationFrame(loop)}
   function done(e){tx=cx=e.getBoundingClientRect().left+e.getBoundingClientRect().width/2;vx=0;draw();
@@ -656,7 +656,7 @@ function LGBar(nav,o){
   nav.addEventListener('click',ev=>{if(!prog&&performance.now()<eat){ev.preventDefault();ev.stopImmediatePropagation()}},true);
   nav.addEventListener('pointerdown',ev=>{if(ev.button)return;const e=ev.target.closest('.lg-it');if(!e)return;st={x:ev.clientX,y:ev.clientY,e,from:(act()||e).getBoundingClientRect()};drag=false},{passive:true});
   const move=ev=>{if(!st)return;const dx=ev.clientX-st.x;
-    if(!drag&&Math.abs(dx)>6){drag=true;nav.classList.add('lg-drag');const f=st.from;show(ev.clientX,f.left+f.width/2)}
+    if(!drag&&Math.abs(dx)>4){drag=true;nav.classList.add('lg-drag');const f=st.from;show(ev.clientX,f.left+f.width/2)}
     if(drag){tx=ev.clientX;if(!raf)raf=requestAnimationFrame(loop)}};
   const up=ev=>{if(!st)return;const s=st;st=null;
     if(drag){const e=near(tx);eat=performance.now()+500;nav.classList.remove('lg-drag');done(e);drag=false;pick(e)}
@@ -686,7 +686,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16e";
+const VERSION = "2026-11-16f";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
