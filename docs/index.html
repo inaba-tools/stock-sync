@@ -18,6 +18,7 @@
 :root{--bg:#f4f3ef;--card:#fff;--text:#1d1d1b;--sub:#6b6a66;--line:rgba(0,0,0,.08);--acc:#0a7d5a;--accbg:#e1f5ee;--warn:#a35a00;--warnbg:#fdf1dc;--red:#b3261e;--redbg:#fce8e6;--blue:#185fa5;--bluebg:#e6f1fb}
 @media (prefers-color-scheme:dark){:root{--bg:#121211;--card:#1e1e1c;--text:#f1f0ec;--sub:#a3a29c;--line:rgba(255,255,255,.1);--acc:#5dcaa5;--accbg:#0c3a2d;--warn:#f0b35a;--warnbg:#3a2a10;--red:#f19a92;--redbg:#3d1714;--blue:#85b7eb;--bluebg:#0f2a45}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-drag:none}
+input,textarea,[contenteditable]{-webkit-user-drag:auto}
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:var(--bg);color:var(--text);font-family:-apple-system,"Hiragino Sans",system-ui,sans-serif;font-size:16px;line-height:1.6;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 #scroll{position:fixed;inset:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 input,textarea{-webkit-user-select:text;user-select:text}
@@ -685,7 +686,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16d";
+const VERSION = "2026-11-16e";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -804,11 +805,12 @@ async function fetchTab(name) {
   return !old || JSON.stringify(old.v) !== JSON.stringify(v);
 }
 function busyTyping() { const a = document.activeElement; return a && /INPUT|TEXTAREA/.test(a.tagName); }
+function busyDraft() { const m = $("#msg"); return busyTyping() || !!(m && m.value.trim()) || !!$("#sheet.on"); }   // 2026/11/16 入力中・書きかけ・シート表示中は描き直さない
 const writing = {};
 function refreshBg(name) {
   if (writing[name] > 0) return Promise.resolve();
   if (pending[name]) return pending[name];
-  return pending[name] = fetchTab(name).then(ch => { if (ch && !busyTyping() && !$("#sheet.on")) render(false); }).catch(() => {}).finally(() => delete pending[name]);
+  return pending[name] = fetchTab(name).then(ch => { if (ch && !busyDraft()) render(false); }).catch(() => {}).finally(() => delete pending[name]);
 }
 async function tab(name, fresh) {   // 前回のデータがあればすぐ返し、古ければ裏で最新にして描き直す
   if (!fresh && cache[name]) { if (Date.now() - cache[name].at > 20000) refreshBg(name); return cache[name].v; }
@@ -1209,7 +1211,7 @@ function doPull() {   // 取り込み＋読み直し（同時に2回は走らせ
     const n0 = res.added || pulled.length;
     if (res.added && !res.kicked) call("msg_kick").catch(() => {});   // 返信案づくり（GitHub）は待たずに後ろで頼む
     if (res.tab) applyTab("買い手メッセージ", res.tab);
-    render(false, true);
+    if (!busyDraft()) render(false);   // 2026/11/16 入力中に描き直すと文字が消えてキーボードが閉じるため
     clearInterval(pullTimer);
     if (n0) { let n = 0; pullTimer = setInterval(() => {   // AIの返信案が付くまで10秒ごとに見る（最大3分）
       if (++n > 18) return clearInterval(pullTimer);
