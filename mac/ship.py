@@ -1113,7 +1113,7 @@ def send_app_link():
     print(stamp(), "輸出帳の合い鍵リンクをメールしました")
 
 
-QUOTE_DONE = HOME / "quote_v1.done"
+QUOTE_DONE = HOME / "quote_v2.done"   # v1は候補の読み方を間違えて金額が残らなかった
 QUOTE_TO = ["US", "CA", "MX", "GB", "DE", "FR", "IT", "ES", "NL", "AU", "NZ", "SA", "AE", "KW", "IL",
             "KR", "TW", "HK", "SG", "TH", "MY", "PH", "ID"]
 QUOTE_BOX = {"小": (0.30, 22, 13, 6), "中": (0.50, 20, 20, 6), "大": (1.00, 25, 18, 10)}
@@ -1134,8 +1134,9 @@ def quote_survey():
                     r = page.evaluate(API_JS, ["quoteTo", {"item": "366806342771", "to": to, "weight": w, "length": l, "width": wd, "height": h}])
                 except Exception as e:
                     r = {"err": type(e).__name__}
-                lst = (r or {}).get("successMessage") if isinstance(r, dict) else None   # 候補は successMessage に入る（ship_liveと同じ）
-                cands = [(c.get("serviceCode"), (c.get("serviceName") or "").replace("\n", " ")[:60], c.get("shippingFee"), c.get("shippingFeeCCode"))
+                lst = r if isinstance(r, list) else ((r or {}).get("successMessage") if isinstance(r, dict) else None)   # v1：候補の一覧がそのまま返ってきた
+                cands = [f'{c.get("serviceCode")}:{c.get("shippingFee")}{c.get("shippingFeeCCode") or ""}'
+                         + ("" if c.get("shippingFee") not in (None, "", 0) else ":" + str({k: v for k, v in c.items() if "fee" in k.lower() or "price" in k.lower()})[:150])
                          for c in (lst if isinstance(lst, list) else []) if isinstance(c, dict)]
                 out[f"{size}|{to}"] = cands or str(r)[:300]
                 page.wait_for_timeout(800)
