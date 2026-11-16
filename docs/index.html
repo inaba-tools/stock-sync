@@ -1163,7 +1163,7 @@ async function viewChat(row, fresh) {
     if (stt.startsWith("履歴")) {}
     else if (stt.startsWith("送信済み")) body += `<div class="msg me"><time>送信済み<br>${esc(hm(stt) || "")}</time><div class="bubble">${c(x.r, B.rja) ? br(c(x.r, B.rja)) + `<div class="en">${esc(c(x.r, B.ren))}</div>` : esc(c(x.r, B.ren))}</div></div>`;
     else if (stt.startsWith("返信不要")) body += `<div class="day"><span>返信しないで済みにしました</span></div>`;
-    else if (stt.startsWith("返信済み")) { if (c(x.r, B.ren)) body += `<div class="msg me"><time>eBayで<br>返信済み</time><div class="bubble">${c(x.r, B.rja) ? br(c(x.r, B.rja)) : esc(c(x.r, B.ren))}</div></div>`; }
+    else if (stt.startsWith("返信済み")) { if (realReply(t, x, stt)) body += `<div class="msg me"><time>eBayで<br>返信済み</time><div class="bubble">${c(x.r, B.rja) ? br(c(x.r, B.rja)) : esc(c(x.r, B.ren))}</div></div>`; }
     else if (truthy(c(x.r, B.send))) body += `<div class="msg me pend"><time>送信待ち</time><div class="bubble">${br(c(x.r, B.rja))}<div class="en">${esc(c(x.r, B.ren))}</div></div></div>`;
     else if (stt.startsWith("送れません")) body += `<div class="msg me"><time style="color:var(--red)">送れません<br>でした</time><div class="bubble">${br(c(x.r, B.rja))}</div></div>`;
   });
@@ -1177,6 +1177,17 @@ async function viewChat(row, fresh) {
     <div class="row" style="gap:8px;align-items:flex-end"><textarea id="msg" rows="1" placeholder="メッセージを入力" oninput="grow(this);liveEn()"></textarea>
     <button class="sendb" id="sendb" aria-label="送信" onclick="sendMsg(${open ? open.row : 0})"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3.4 20.4l17.5-7.5a1 1 0 000-1.8L3.4 3.6a1 1 0 00-1.4 1.1L4 11l9 1-9 1-2 6.3a1 1 0 001.4 1.1z"/></svg></button></div></div></div>`;
 }
+// 2026/11/16 本人指摘「送っていない文がeBayで送信済みになっている」：
+// 「返信済み」の行に入っているのはAIの返信案のことがある。実際に送った文を取り込んだ「返信済み（eBay）」だけ出し、
+// その後（次の質問まで）に本当に送った文（送信済みの行）があれば、そちらだけ出す
+const realReply = (t, x, stt) => {
+  if (!stt.startsWith("返信済み（eBay）") || !String(c(x.r, B.ren)).trim()) return false;
+  for (const y of t.slice(t.indexOf(x) + 1)) {
+    if (String(c(y.r, B.qja) || c(y.r, B.qen)).trim()) break;
+    if (/^送信済み/.test(String(c(y.r, B.state)))) return false;
+  }
+  return true;
+};
 let room = null;
 let hiddenView = false;
 // 2026/11/14 本人の希望「すぐ返信できる体制」：トークを下に引っ張ると、Gmailに届いたeBayのメッセージをその場で読んで出す
