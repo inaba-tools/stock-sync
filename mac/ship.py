@@ -567,13 +567,6 @@ API_JS = r"""async ([act, a]) => {
     }
     return null;
   }
-  if (act === 'quoteTo') {   // 2026/11/16 送料表の見直し用：同じパッケージで送り先の国だけ変えて送料を調べる（読むだけ・何も決めない）
-    const list = await search();
-    const h = list.find(x => JSON.stringify(x).includes(a.item)) || list[0]; if (!h) return {isSuccess: false, errorMessage: 'no package'};
-    const so = ((h.salesPackageItemList || [])[0] || {}).ebaySalesOrder || {};
-    return await post('/api/SalesPackage/SelectShippingAndShippingFeeQuery', {salesPackageSearchEntity: h, ebayUserKey: so.ebayUserKey || h.ebayUserKey,
-      shipFromCountryCode: 'JP', shipToCountryCode: a.to, weight: a.weight, length: a.length, width: a.width, height: a.height, isAG: false});
-  }
   if (act === 'pickup') return await post('/api/SalesPackage/PickUp', {searchEntity: null, salesPackageKeys: [a.key], pickUpTime: a.time});
   if (act === 'markShipped') return await post('/api/SalesPackage/MarkAsShipped', {salesPackageKeys: [a.key]});
   return null;
@@ -1113,46 +1106,8 @@ def send_app_link():
     print(stamp(), "輸出帳の合い鍵リンクをメールしました")
 
 
-QUOTE_DONE = HOME / "quote_v2.done"   # v1は候補の読み方を間違えて金額が残らなかった
-QUOTE_TO = ["US", "CA", "MX", "GB", "DE", "FR", "IT", "ES", "NL", "AU", "NZ", "SA", "AE", "KW", "IL",
-            "KR", "TW", "HK", "SG", "TH", "MY", "PH", "ID"]
-QUOTE_BOX = {"小": (0.30, 22, 13, 6), "中": (0.50, 20, 20, 6), "大": (1.00, 25, 18, 10)}
-
-
-def quote_survey():
-    """2026/11/16 本人OK：送料表を実際のFedEx（SpeedPAK）の送料に直すため、国ごと・箱ごとの送料をCPaSSで調べて
-    「発送ログ」に書く（1回だけ。読むだけで、配送の割り当てなどは一切しない）"""
-    if QUOTE_DONE.exists():
-        return
-    from playwright.sync_api import sync_playwright
-    out = {}
-    with sync_playwright() as p:
-        page = cpass_tab(attach(p))
-        for size, (w, l, wd, h) in QUOTE_BOX.items():
-            for to in QUOTE_TO:
-                try:
-                    r = page.evaluate(API_JS, ["quoteTo", {"item": "366806342771", "to": to, "weight": w, "length": l, "width": wd, "height": h}])
-                except Exception as e:
-                    r = {"err": type(e).__name__}
-                lst = r if isinstance(r, list) else ((r or {}).get("successMessage") if isinstance(r, dict) else None)   # v1：候補の一覧がそのまま返ってきた
-                cands = [f'{c.get("serviceCode")}:{c.get("shippingFee")}{c.get("shippingFeeCCode") or ""}'
-                         + ("" if c.get("shippingFee") not in (None, "", 0) else ":" + str({k: v for k, v in c.items() if "fee" in k.lower() or "price" in k.lower()})[:150])
-                         for c in (lst if isinstance(lst, list) else []) if isinstance(c, dict)]
-                out[f"{size}|{to}"] = cands or str(r)[:300]
-                page.wait_for_timeout(800)
-    log_rows([("送料の調査", "", json.dumps(out, ensure_ascii=False))])
-    QUOTE_DONE.touch()
-
-
 def once():
     place_shortcut()
-    try:
-        quote_survey()
-    except Busy:
-        pass
-    except Exception as e:
-        log_rows([("送料の調査", "", f"できませんでした：{type(e).__name__} {str(e)[:300]}")])
-        QUOTE_DONE.touch()
     try:
         pass   # send_app_link()  11/12 本人と相談中（Googleログイン方式に変えるか）のため止めた
     except Exception as e:
