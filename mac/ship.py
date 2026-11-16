@@ -25,6 +25,8 @@ JST = ZoneInfo("Asia/Tokyo")
 SALES = "売上"
 HEAD_ROW = 5
 C_WEIGHT, C_PACKED, C_STATUS, C_TRACK, C_PICKUP = 25, 26, 27, 28, 29   # Y〜AC（1始まり）
+C_SHIPFEE = 10   # J：送料(円)。正の数で入れる（表示で「-」が付く）。2026/11/16 CPaSSの実際の送料を書く
+FEES = HOME / "ship_fees.json"   # 出品番号 → CPaSSの実際の送料（円）。書いた分を覚えておく
 C_REPRINT = 30   # AD：ハコペンの「ラベルを印刷し直す」ボタン（11/12）
 C_PICKWANT = 32  # AF：集荷の希望（ハコペンで選ぶ。例 2026/11/14 09:00〜12:00。空なら翌営業日15:00〜18:00）
 DY, DX, NEXT, TEST = (3, 26), (4, 26), (3, 28), (4, 28)                  # Z3・Z4・AB3・AB4
@@ -660,6 +662,10 @@ def ship_live(ctx, page, row, item, weight, st, rows):
         track = sp["shippingTrackCode"]
         sheet("tab_set", name=SALES, cells=[[row, C_TRACK, track]])
         ship_status(row, f"追跡番号取得（送料{int(num(sp.get('shippingFee')))}円）")
+        try:
+            record_fee(row, item, num(sp.get("shippingFee")))
+        except Exception as e:
+            print(stamp(), "送料の記録で失敗:", type(e).__name__)
         st = "追跡番号取得"
     # ④ ラベル（1件2面）を4面シールに印刷。1回だけ
     if not any(x in st for x in ("ラベル印刷済", "集荷予約済", "集荷待ち")):
@@ -1106,6 +1112,71 @@ def send_app_link():
     print(stamp(), "輸出帳の合い鍵リンクをメールしました")
 
 
+def load_fees():
+    try:
+        return json.loads(FEES.read_text())
+    except Exception:
+        return {}
+
+
+def record_fee(row, item, fee, old=None):
+    """2026/11/16 本人の希望：CPaSSの実際の送料を売上シートの送料(J列)に書く。見込みと500円以上ずれたら知らせる"""
+    fee = int(round(fee or 0))
+    if fee <= 0:
+        return
+    fees = load_fees()
+    first = str(item) not in fees
+    if old is None:
+        try:
+            v = sheet("tab_get", name=SALES).get("values") or []
+            old = num(re.sub(r"[^\d.]", "", str(cell(v, (row, C_SHIPFEE)))))
+        except Exception:
+            old = 0
+    sheet("tab_set", name=SALES, cells=[[row, C_SHIPFEE, fee]])
+    fees[str(item)] = fee
+    FEES.write_text(json.dumps(fees))
+    if first and old and abs(fee - old) >= 500:
+        msg = f"見込み{int(old):,}円 → 実際{fee:,}円（差 {fee - int(old):+,}円）。送料表の見直しが必要かもしれません"
+        log_rows([("送料のずれ", str(item), msg)])
+        notify_mac(f"送料のずれ：{msg}")
+    print(stamp(), "実際の送料を記録:", item, fee, "（見込み", old, "）")
+
+
+def backfill_fees(values):
+    """追跡番号がある行で、まだ実際の送料を書いていないもの（手作業で発送した分も）をCPaSSから読んで書く。
+    書いた分は管理表のApps Scriptに見込みで上書きされていたら書き直す。CPaSSを開くのは1回に3件まで"""
+    fees = load_fees()
+    need, fix = [], []
+    for i, r in enumerate(values):
+        r = list(r) + [""] * 32
+        item = re.sub(r"\D", "", str(r[3]))
+        if i + 1 <= HEAD_ROW or not item or not str(r[C_TRACK - 1]).strip():
+            continue
+        have = num(re.sub(r"[^\d.]", "", str(r[C_SHIPFEE - 1])))
+        if item in fees:
+            if int(round(have)) != fees[item]:
+                fix.append([i + 1, C_SHIPFEE, fees[item]])
+        else:
+            need.append((i + 1, item, have))
+    if fix:
+        sheet("tab_set", name=SALES, cells=fix)
+    if not need:
+        return
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        page = cpass_tab(attach(p))
+        for row, item, have in need[:3]:
+            d = cpass_detail(page, item) or {}
+            fee = num(((d.get("salesPackage") or {}) if isinstance(d, dict) else {}).get("shippingFee"))
+            if fee > 0:
+                record_fee(row, item, fee, have)
+            else:
+                print(stamp(), "CPaSSに送料が無い（手作業で別の方法で送った分など）:", item)
+                fees = load_fees()
+                fees[item] = int(round(have)) if have else 0
+                FEES.write_text(json.dumps(fees))
+
+
 def once():
     place_shortcut()
     try:
@@ -1132,6 +1203,12 @@ def once():
     for f in HOME.glob("probe_*"):   # 11/12 調査（probe）は終わったので、目印のファイルを片付ける
         f.unlink(missing_ok=True)
     values = sheet("tab_get", name=SALES).get("values") or []
+    try:   # 2026/11/16 実際の送料を売上シートへ（発送済みで未記録の分）
+        backfill_fees(values)
+    except Busy:
+        pass
+    except Exception as e:
+        print(stamp(), "実際の送料の記録で失敗:", type(e).__name__, str(e)[:200])
     if truthy(cell(values, TEST)):
         LABELS.mkdir(parents=True, exist_ok=True)
         print_pdf(to_pdf(test_page(num(cell(values, DX)), num(cell(values, DY))), LABELS / "test.pdf"))
