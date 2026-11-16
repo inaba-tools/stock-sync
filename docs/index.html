@@ -686,7 +686,7 @@ const truthy = v => v === true || String(v).toUpperCase() === "TRUE";
 function toast(t){ const e=$("#toast"); e.textContent=t; e.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>e.classList.remove("on"),2400); }
 
 // ---- 管理表との窓口（Googleでログインした持ち主だけ。通行証はこの端末にだけ保存） ----
-const VERSION = "2026-11-16g";
+const VERSION = "2026-11-16h";
 const API_URL = "https://script.google.com/macros/s/AKfycbyZHCgZsDWaMxdtBcM_Iy_O3Z9Rda9OjFRaECV3_wR2HqINyjaaBj6e60tzY1rboMZQbg/exec";
 const CLIENT_ID = "944595939498-b4ei4dlbcuap8v4o0ellepfj41m4j3j8.apps.googleusercontent.com";
 const ss = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
@@ -926,7 +926,7 @@ function lastW(sales, x) {
 function stagePage(k, h) {
   const nm = x => esc(c(x.r, S.model) || c(x.r, S.title));
   if (k === "buy") return h.buy.length ? more(h.buy, (x, i) => `<div class="card ci" ${cardIn(i)} id="cd${x.row}">
-    <div class="t">${esc(c(x.r, L.title))}</div><div class="s">${esc(c(x.r, L.src))} ${fmt(yen(c(x.r, L.cost)))}・利益 ${fmt(yen(c(x.r, L.profit)))}</div>
+    <div class="t">${esc(c(x.r, L.title))}</div><div class="s">${esc(c(x.r, L.src))} ${fmt(yen(c(x.r, L.cost)))}・利益 ${fmt(buyProfit(h.sales, x.r))}</div>
     <div class="row act"><a href="${esc(c(x.r, L.url))}" target="_blank" rel="noopener noreferrer"><button class="sub">仕入元を開く</button></a><button onclick="act(${x.row},()=>bought(${x.row}))">仕入れた</button></div></div>`)
     : emptyStage("仕入れる商品はありません。", "売れたらここに出ます。");
   if (k === "wait") return h.wait.length ? more(h.wait, (x, i) => `<div class="card ci" ${cardIn(i)} id="cd${x.row}">
@@ -950,6 +950,13 @@ function stagePage(k, h) {
   return h.done.length ? more(h.done, (x, i) => `<div class="card ci" ${cardIn(i)}><div class="row"><div class="grow"><div class="t">${nm(x)}</div>
     <div class="s">届いた日 ${esc(c(x.r, S.deliv) || "−")}・${pf(x.r)}</div></div><span class="ok-mark">${svgI("M5 12l5 5 9-10")}</span></div></div>`)
     : emptyStage("今月届いた商品はまだありません。", "");
+}
+// 2026/11/16 本人指摘（ホームと管理表の利益がずれる）：売れた後は売上シートの見込み利益（eBayの実際の受取額から計算）を出す。
+// 無在庫商品リストの想定利益は出品前の見積もり（手数料を多めの20%で見ている）なので、売上の行が無いときだけ使う
+function buyProfit(sales, r) {
+  const item = String(c(r, L.item)).trim();
+  const sr = item && (sales || []).find((x, i) => i >= S.head && String(c(x, S.item)).trim() === item);
+  return sr && String(c(sr, S.profit)).trim() ? yen(c(sr, S.profit)) : yen(c(r, L.profit));
 }
 const emptyStage = (a, b) => `<div class="empty ci">${a}${b ? "<br>" + b : ""}</div>`;
 async function viewTodo(fresh) {
