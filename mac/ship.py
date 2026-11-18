@@ -1177,38 +1177,8 @@ def backfill_fees(values):
                 FEES.write_text(json.dumps(fees))
 
 
-def once():
-    place_shortcut()
-    try:
-        pass   # send_app_link()  11/12 本人と相談中（Googleログイン方式に変えるか）のため止めた
-    except Exception as e:
-        print(stamp(), "輸出帳のリンクを送れませんでした:", type(e).__name__)
-    refresh_helpers()
-    try:
-        retry_hidden(sheet("tab_get", name=SALES).get("values") or [])
-    except Exception as e:
-        print(stamp(), "開き直しで失敗:", type(e).__name__, str(e)[:200])
-    try:
-        unify_browser(sheet("tab_get", name=SALES).get("values") or [])
-    except Exception as e:
-        print(stamp(), "ブラウザの切り替えで失敗:", type(e).__name__, str(e)[:200])
-    if not showing():
-        hide_app()
-    try:
-        keep_alive()
-    except Busy:
-        pass
-    except Exception as e:   # ログインの確認で失敗しても、印刷などはそのまま続ける
-        print(stamp(), "ログインの確認で失敗:", type(e).__name__, str(e)[:200])
-    for f in HOME.glob("probe_*"):   # 11/12 調査（probe）は終わったので、目印のファイルを片付ける
-        f.unlink(missing_ok=True)
-    values = sheet("tab_get", name=SALES).get("values") or []
-    try:   # 2026/11/16 実際の送料を売上シートへ（発送済みで未記録の分）
-        backfill_fees(values)
-    except Busy:
-        pass
-    except Exception as e:
-        print(stamp(), "実際の送料の記録で失敗:", type(e).__name__, str(e)[:200])
+def handle_prints(values):
+    """印刷の依頼（テスト印刷・書類の印刷・ラベルの再印刷）を処理する。11/18 once()から分けて、待ち時間中も30秒ごとに見る"""
     if truthy(cell(values, TEST)):
         LABELS.mkdir(parents=True, exist_ok=True)
         print_pdf(to_pdf(test_page(num(cell(values, DX)), num(cell(values, DY))), LABELS / "test.pdf"))
@@ -1244,6 +1214,41 @@ def once():
             log_rows([("再印刷", item, "ラベルを印刷し直しました")])
         else:
             log_rows([("再印刷", item, "ラベルPDFが手元にないため印刷できませんでした")])
+
+
+def once():
+    place_shortcut()
+    try:
+        pass   # send_app_link()  11/12 本人と相談中（Googleログイン方式に変えるか）のため止めた
+    except Exception as e:
+        print(stamp(), "輸出帳のリンクを送れませんでした:", type(e).__name__)
+    refresh_helpers()
+    try:
+        retry_hidden(sheet("tab_get", name=SALES).get("values") or [])
+    except Exception as e:
+        print(stamp(), "開き直しで失敗:", type(e).__name__, str(e)[:200])
+    try:
+        unify_browser(sheet("tab_get", name=SALES).get("values") or [])
+    except Exception as e:
+        print(stamp(), "ブラウザの切り替えで失敗:", type(e).__name__, str(e)[:200])
+    if not showing():
+        hide_app()
+    try:
+        keep_alive()
+    except Busy:
+        pass
+    except Exception as e:   # ログインの確認で失敗しても、印刷などはそのまま続ける
+        print(stamp(), "ログインの確認で失敗:", type(e).__name__, str(e)[:200])
+    for f in HOME.glob("probe_*"):   # 11/12 調査（probe）は終わったので、目印のファイルを片付ける
+        f.unlink(missing_ok=True)
+    values = sheet("tab_get", name=SALES).get("values") or []
+    try:   # 2026/11/16 実際の送料を売上シートへ（発送済みで未記録の分）
+        backfill_fees(values)
+    except Busy:
+        pass
+    except Exception as e:
+        print(stamp(), "実際の送料の記録で失敗:", type(e).__name__, str(e)[:200])
+    handle_prints(values)
     # ③：梱包済みの行 → CPaSSで発送（追跡番号が空の行と、途中まで進んだ行）。手作業で済ませた行（追跡番号あり・状況が空）は触らない
     todo = []
     for i, r in enumerate(values):
@@ -1271,6 +1276,9 @@ def once():
         print(stamp(), "発送", row, res)
 
 
+START = time.time()
+
+
 def main():
     global ENV
     if "--login" in sys.argv:
@@ -1291,6 +1299,13 @@ def main():
     ENV = load_env()
     try:
         once()
+        # 11/18 印刷の依頼をすぐ拾う：次の回（5分ごと）が来るまで、30秒ごとに印刷の依頼だけ見る
+        while time.time() - START < 4 * 60 + 20:
+            time.sleep(30)
+            try:
+                handle_prints(sheet("tab_get", name=SALES).get("values") or [])
+            except Exception as e:
+                print(stamp(), "印刷の確認で失敗:", type(e).__name__, str(e)[:200])
         return 0
     except Exception as e:
         traceback.print_exc()
