@@ -380,6 +380,27 @@ def get_state():
         return "", 0
 
 
+def relogin_visible():
+    """11/18 隠した普通の窓（画面の外に置いて隠す）でCPaSSを読み直し、eBay経由で入り直す。戻り値：(入れたか, 理由)"""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        ctx = attach(p, force=True, visible=True)
+        page = cpass_tab(ctx)
+        tidy_tabs(ctx, page)
+        page.reload(wait_until="domcontentloaded", timeout=90_000)
+        page.wait_for_timeout(6000)
+        ok, why = ensure_login(page)
+        if not ok and "signin.ebay.com" in page.url:
+            try:
+                page.evaluate(EBAY_KMSI)
+            except Exception:
+                pass
+        if ok:
+            tidy_tabs(ctx, page)
+        hide_unless_showing(ctx)
+        return ok, why
+
+
 def keep_alive():
     """10分ごと（CPaSSは約30分なにもしないとログインが切れるため・11/12）：CPaSSのタブを読み直してログインを保つ。切れたらeBay経由で入り直しを試し、だめなら1回だけ知らせる"""
     v, t = get_state()
@@ -398,6 +419,14 @@ def keep_alive():
                 page.evaluate(EBAY_KMSI)
             except Exception:
                 pass
+    if not ok and v != "ng":   # 11/18 見えない窓だとeBayにパスワードを求められることがある→隠した普通の窓で1回だけ入り直す
+        try:
+            ok, _ = relogin_visible()
+            if ok:
+                log_rows([("ログイン", CPASS, "見えない窓では入れず、隠した普通の窓で入り直しました")])
+                print(stamp(), "隠した普通の窓でCPaSSに入り直し")
+        except Exception as e:
+            print(stamp(), "隠した窓での入り直しで失敗:", type(e).__name__, str(e)[:200])
     try:   # 2026/11/13 最後に確かめた時刻と結果を発送ログの右上（F1:G1）に毎回上書き＝Macが動いているかシートで分かる
         sheet("tab_set", name=LOGTAB, cells=[[1, 6, "最後の確認"], [1, 7, f"{stamp()} {'ログインOK' if ok else 'ログイン切れ'}・ブラウザpid {browser_pid()}"]])
     except Exception:
@@ -411,6 +440,10 @@ def keep_alive():
         msg = f"{why}。前に出ている専用ブラウザでログインしてください（閉じてしまったら「書類」→「eBay発送」の「CPaSSログイン」）"
         log_rows([("ログイン切れ", CPASS, msg)])
         notify_mac("CPaSSのログインが切れました。前に出たブラウザでログインしてください")
+        try:   # 11/18 iPhoneでも気づけるようにメールでも1回だけ知らせる
+            sheet("mail", subject="【eBay発送】CPaSSのログインが必要です", body=msg)
+        except Exception:
+            pass
         try:
             subprocess.Popen(["/bin/bash", str(HOME / "ship.sh"), "--login"], start_new_session=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
